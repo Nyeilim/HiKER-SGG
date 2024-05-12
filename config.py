@@ -7,7 +7,7 @@ import numpy as np
 from munch import Munch
 
 
-ROOT_PATH = os.path.join('/', 'home', 'ce', 'hikersgg') # '/path/to/hiker'
+ROOT_PATH = os.path.join('/', 'output', 'HiKER-SGG') # '/path/to/hiker'
 
 
 def path(fn):
@@ -15,12 +15,12 @@ def path(fn):
 
 
 def stanford_metadata_path(fn):
-    return os.path.join('/home/ce/data/vg', fn) # '/path/to/stanford/preprocessed/metadata'
+    return os.path.join('/root/VG_metadata', fn) # '/path/to/stanford/preprocessed/metadata'
 
 # =============================================================================
 # Update these with where your data is stored ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-VG_IMAGES = os.path.join('/home/ce/data/vg/VG_100K') # '/path/to/visual/genome/images'
+VG_IMAGES = os.path.join('/root/VG_100K') # '/path/to/visual/genome/images'
 
 IM_DATA_FN = stanford_metadata_path('image_data.json')
 VG_SGG_FN = stanford_metadata_path('VG-SGG.h5')

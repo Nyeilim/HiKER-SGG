@@ -383,7 +383,7 @@ class GGNN(Module):
             if with_clean_classifier:
                 pred_cls_logits = torch_mm(self.fc_output_proj_img_pred_clean(nodes_img_pred), self.fc_output_proj_ont_pred_clean(nodes_ont_pred).t())
                 if t == self.time_step_num - 1:
-                    pred_adj_np = np.load('/home/ce/data/vg/conf_mat_updated.npy')
+                    pred_adj_np = np.load('/output/data/misc/conf_mat_updated.npy')
                     pred_adj_nor = torch_tensor(pred_adj_np, dtype=torch_float32, device=CUDA_DEVICE)
                     index = torch_zeros(60 + 8, requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
                     index[0] = True
