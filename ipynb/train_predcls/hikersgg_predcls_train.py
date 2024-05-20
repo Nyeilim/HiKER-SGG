@@ -4,13 +4,13 @@
 # In[ ]:
 
 
-get_ipython().run_line_magic('load_ext', 'autoreload')
-get_ipython().run_line_magic('autoreload', '2')
+# get_ipython().run_line_magic('load_ext', 'autoreload')
+# get_ipython().run_line_magic('autoreload', '2')
 import sys
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
-codebase = '/output/HiKER-SGG/'
-sys.path.append("/output/HiKER-SGG/")
+os.environ["CUDA_VISIBLE_DEVICES"]="0"  # 选择显卡
+codebase = '/output/HiKER-SGG/'         # 项目根目录
+sys.path.append("/output/HiKER-SGG/")   # 添加环境变量
 # sys.path.append('../../../')
 # sys.path.append('../../../apex')
 
@@ -63,7 +63,7 @@ from lib.my_model_24 import KERN
 
 # In[ ]:
 
-
+# 创建配置类，加载配置
 conf = ModelConfig(f'''
 -m predcls -p 2500 -clip 5
 -tb_log_dir ../data/summaries/kern_predcls/{exp_name}
@@ -82,6 +82,7 @@ conf = ModelConfig(f'''
 
 
 # modified
+# 这个 .MODEL 是个 Munch 对象实例，Munch 类的行为逻辑就好像字典，不过他是以 .属性名 访问值
 conf.MODEL.CONF_MAT_FREQ_TRAIN = '/output/data/misc/conf_mat_freq_train.npy'
 conf.MODEL.LRGA.USE_LRGA = False
 conf.MODEL.USE_ONTOLOGICAL_ADJUSTMENT = False
@@ -94,7 +95,7 @@ conf.num_workers = 9
 
 # In[ ]:
 
-
+# 获取当前工作目录
 os.getcwd()
 
 
@@ -102,6 +103,7 @@ os.getcwd()
 
 
 # For evaluating the confusion matrix
+# VG 类继承自 Dataset 类，把数据集拆分为训练集、验证集、测试集
 train_full, val, test = VG.splits(num_val_im=conf.val_size, filter_duplicate_rels=True,
                             use_proposals=conf.use_proposals,
                             filter_non_overlap=conf.mode == 'sgdet', with_clean_classifier=False, get_state=False)
@@ -109,7 +111,7 @@ train_full, val, test = VG.splits(num_val_im=conf.val_size, filter_duplicate_rel
 
 # In[ ]:
 
-
+# VGDataLoader 类继承自 Dataloader 类，这玩意就是个迭代器
 _, train_full_loader = VGDataLoader.splits(train_full, train_full, mode='rel',
                                                batch_size=conf.batch_size,
                                                num_workers=conf.num_workers,

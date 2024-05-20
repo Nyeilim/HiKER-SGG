@@ -65,6 +65,7 @@ ANCHOR_SCALES = (2.22152954, 4.12315647, 7.21692515, 12.60263013, 22.7102731) #(
 
 class ModelConfig(object):
     """Wrapper class for model hyperparameters."""
+    # 构造函数
     def __init__(self, args_str=None):
         """
         Defaults
@@ -131,17 +132,20 @@ class ModelConfig(object):
         self.MODEL.GN = Munch()
         self.MODEL.GN.NUM_GROUPS = None
 
+        # 上面那串可以理解成显式定义，下面开始创建 parser 对象来解析参数字符串 args_str
         self.parser = self.setup_parser()
         if args_str is None:
             self.args = vars(self.parser.parse_args())
         else:
+            # vars 将会返回当前类的属性字典，就是会显示每个类属性（变量）和具体的值，这里其实是将配置解析到 parser 类属性中
+            # 然后再把 parser 的类属性照搬到 config 此类中
             self.args = vars(self.parser.parse_args(args_str.split()))
 
         print("~~~~~~~~ Hyperparameters used: ~~~~~~~")
         for x, y in self.args.items():
             print("{} : {}".format(x, y))
 
-        self.__dict__.update(self.args)
+        self.__dict__.update(self.args)     # 手动更新类属性，如果不更新就会是上面的默认的值
 
         if len(self.ckpt) != 0:
             self.ckpt = os.path.join(ROOT_PATH, self.ckpt)
@@ -197,6 +201,7 @@ class ModelConfig(object):
         Sets up an argument parser
         :return:
         """
+        # 下面这些是默认配置
         parser = ArgumentParser(description='training code')
 
 
