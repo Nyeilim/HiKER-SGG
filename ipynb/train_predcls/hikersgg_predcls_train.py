@@ -121,7 +121,7 @@ _, train_full_loader = VGDataLoader.splits(train_full, train_full, mode='rel',
 
 # In[ ]:
 
-
+# 这里的 with_clean_classifier 是 True，它和一个叫 BPL 的东西相关，不知道是什么意思，他在论文的 [22] 中被提到
 train, val, test = VG.splits(num_val_im=conf.val_size, filter_duplicate_rels=True,
                             use_proposals=conf.use_proposals,
                             filter_non_overlap=conf.mode == 'sgdet', with_clean_classifier=True, get_state=False)

@@ -67,6 +67,7 @@ class VG(Dataset):
         self.filter_non_overlap = filter_non_overlap
         self.filter_duplicate_rels = filter_duplicate_rels and self.mode == 'train'
 
+        # 这个 dict_file 就是 VG-SGG-dicts.json
         self.ind_to_classes, self.ind_to_predicates = load_info(dict_file)  # contiguous 151, 51 containing __background__
         self.split_mask, self.gt_boxes, self.gt_classes, self.relationships = load_graphs(
             self.roidb_file, self.mode, num_im, num_val_im=num_val_im,
@@ -149,10 +150,11 @@ class VG(Dataset):
     def is_train(self):
         return self.mode.startswith('train')
 
+    # 类方法，就是 Java 里面那种使用类名调用的方法， cls 参数代表类方法的那个类，此处代表 VG 类
     @classmethod
     def splits(cls, *args, **kwargs):
         """ Helper method to generate splits of the dataset"""
-        train = cls('train', *args, **kwargs)
+        train = cls('train', *args, **kwargs)   # 这段就相当于调用 VG 类的构造函数
         val = cls('val', *args, **kwargs)
         test = cls('test', *args, **kwargs)
         return train, val, test
@@ -611,10 +613,11 @@ def load_info(info_file):
     info['label_to_idx']['__background__'] = 0
     info['predicate_to_idx']['__background__'] = 0
 
+    # 这里挺奇怪的，他直接获取文件里面的 idx_to_predicate, index_to_label 然后转成 List 不就行了
     class_to_ind = info['label_to_idx']
-    predicate_to_ind = info['predicate_to_idx']
+    predicate_to_ind = info['predicate_to_idx'] # 这两东西是个 Map
     ind_to_classes = sorted(class_to_ind, key=lambda k: class_to_ind[k])
-    ind_to_predicates = sorted(predicate_to_ind, key=lambda k: predicate_to_ind[k])
+    ind_to_predicates = sorted(predicate_to_ind, key=lambda k: predicate_to_ind[k]) # 返回 List
 
     return ind_to_classes, ind_to_predicates
 
