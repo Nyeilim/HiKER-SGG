@@ -104,6 +104,7 @@ os.getcwd()
 
 # For evaluating the confusion matrix
 # VG 类继承自 Dataset 类，把数据集拆分为训练集、验证集、测试集
+# 但是这里 split 的目的好像只是为了拿个 train_full，并不是正儿八经的分割
 train_full, val, test = VG.splits(num_val_im=conf.val_size, filter_duplicate_rels=True,
                             use_proposals=conf.use_proposals,
                             filter_non_overlap=conf.mode == 'sgdet', with_clean_classifier=False, get_state=False)
@@ -121,6 +122,7 @@ _, train_full_loader = VGDataLoader.splits(train_full, train_full, mode='rel',
 
 # In[ ]:
 
+# 下面这个就是正儿八经地分割
 # 这里的 with_clean_classifier 是 True，它和一个叫 BPL 的东西相关，不知道是什么意思，他在论文的 [22] 中被提到
 train, val, test = VG.splits(num_val_im=conf.val_size, filter_duplicate_rels=True,
                             use_proposals=conf.use_proposals,
@@ -135,7 +137,7 @@ ind_to_predicates = train.ind_to_predicates # ind_to_predicates[0] means no rela
 
 # In[ ]:
 
-
+# 这里的两个集合就是正常的 train val, 和上面的 train_full 不一样
 train_loader, val_loader = VGDataLoader.splits(train, val, mode='rel',
                                                batch_size=conf.batch_size,
                                                num_workers=conf.num_workers,
@@ -145,7 +147,7 @@ train_loader, val_loader = VGDataLoader.splits(train, val, mode='rel',
 
 # In[ ]:
 
-
+# 这个玩意好像就是模型本体
 detector = KERN(classes=train.ind_to_classes, rel_classes=train.ind_to_predicates,
                 num_gpus=conf.num_gpus, mode=conf.mode, require_overlap_det=True,
                 use_resnet=conf.use_resnet, use_proposals=conf.use_proposals, pooling_dim=conf.pooling_dim,
@@ -173,6 +175,7 @@ for n, param in detector.detector.named_parameters():
 from apex.optimizers import FusedAdam, FusedSGD
 from torch import optim
 
+# 优化器
 def get_optim(lr):
     # Lower the learning rate on the VGG fully connected layers by 1/10th. It's a hack, but it helps
     # stabilize the models.

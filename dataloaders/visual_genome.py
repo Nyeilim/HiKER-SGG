@@ -458,18 +458,20 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
     with open(dict_file,'r') as f:
         vg_dict_info = json_load(f)
 
-    predicates_tree = vg_dict_info['predicate_count']
+    predicates_tree = vg_dict_info['predicate_count'] # 拿到 VG-SGG-dicts.json 里面的 predicate_count
     #predicates_tree = json.load(open('./datasets/vg/predicate_wikipedia_count.json', 'r'))
+    # 根据每个谓词的 count 数从大到小排序，最终出来个列表，每个元素都是个 map.item()，也就是元组，类似 ('on', 712409)
     predicates_sort = sorted(predicates_tree.items(), key=lambda x:x[1], reverse=True)
+    # 这里大概的意思是挑选出 count 在前 15(pred_num) 的谓词，放到 pred_topk 里面作为列表
     for pred_i in predicates_sort:
         if pred_count >= pred_num:
             break
-        pred_topk.append(str(pred_i[0]))
+        pred_topk.append(str(pred_i[0])) # 取 0 就是取到 item ('on', 712409) 中的谓词 'on'
         pred_count += 1
 
     if with_clean_classifier:
         print('Dataloader using BPL')
-        root_classes = pred_topk
+        root_classes = pred_topk # 类似 ['on', 'has', 'in' ... 'wears', 'standing on', 'in front of']
     else:
         print('Dataloader NOT using BPL')
         root_classes = None
@@ -512,6 +514,8 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
             else:
                 split_mask[image_index[i]] = 0
                 continue
+
+        # 下面这段就是 BPL 算法的内容，不知道它在干嘛
         if root_classes is not None and mode == 'train':
             # print('old boxes: ', boxes_i)
             # print('old gt_classes_i: ', gt_classes_i)
@@ -616,8 +620,9 @@ def load_info(info_file):
     # 这里挺奇怪的，他直接获取文件里面的 idx_to_predicate, index_to_label 然后转成 List 不就行了
     class_to_ind = info['label_to_idx']
     predicate_to_ind = info['predicate_to_idx'] # 这两东西是个 Map
+    # 返回 List，最后的返回结果类似 ['__background__', 'airplane', 'animal', 'arm', 'bag']
     ind_to_classes = sorted(class_to_ind, key=lambda k: class_to_ind[k])
-    ind_to_predicates = sorted(predicate_to_ind, key=lambda k: predicate_to_ind[k]) # 返回 List
+    ind_to_predicates = sorted(predicate_to_ind, key=lambda k: predicate_to_ind[k])
 
     return ind_to_classes, ind_to_predicates
 
