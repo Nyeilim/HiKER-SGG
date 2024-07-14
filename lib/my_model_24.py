@@ -30,6 +30,7 @@ CURRENT_DEVICE = current_device()
 class GGNNRelReason(Module):
     """
     Module for relationship classification.
+    场景图生成本质上是谓词分类任务
     """
     def __init__(self, graph_path, emb_path, mode='sgdet', num_obj_cls=151, num_rel_cls=51, obj_dim=4096, rel_dim=4096,
                 time_step_num=3, hidden_dim=512, output_dim=512, use_knowledge=True, use_embedding=True, refine_obj_cls=False, with_clean_classifier=None, with_transfer=None, sa=None, config=None):
@@ -44,17 +45,18 @@ class GGNNRelReason(Module):
         self.obj_dim = obj_dim
         self.rel_dim = rel_dim
 
-
+        # 这两个玩意应该就是论文里说的线性层投影(Projection)
         self.obj_proj = Linear(self.obj_dim, hidden_dim)
         self.rel_proj = Linear(self.rel_dim, hidden_dim)
 
         assert not (refine_obj_cls and mode == 'predcls')
 
+        # 实际的 GGNN 内核
         self.ggnn = GGNN(time_step_num=time_step_num, hidden_dim=hidden_dim, output_dim=output_dim,
                          emb_path=emb_path, graph_path=graph_path, refine_obj_cls=refine_obj_cls,
                          use_knowledge=use_knowledge, use_embedding=use_embedding, config=config, with_clean_classifier=with_clean_classifier, with_transfer=with_transfer, sa=sa, num_obj_cls=num_obj_cls, num_rel_cls=num_rel_cls)
 
-
+    # 这个 forward 方法是 Module 抽象类里面待实现的 Callable 方法
     def forward(self, im_inds, obj_fmaps, obj_logits, rel_inds, vr, obj_labels=None, boxes_per_cls=None):
         """
         Reason relationship classes using knowledge of object and relationship coccurrence.
@@ -75,7 +77,7 @@ class GGNNRelReason(Module):
         scpred_softmax = []
         scent_softmax= []
         for (_, obj_s, obj_e), (_, rel_s, rel_e) in zip(enumerate_by_image(im_inds.data), enumerate_by_image(rel_inds[:,0])):
-            #breakpoint()z
+            # 调用 GGNN 内核
             rl, ol, scpred, scent = self.ggnn(rel_inds[rel_s:rel_e, 1:] - obj_s, obj_probs[obj_s:obj_e], obj_fmaps[obj_s:obj_e], vr[rel_s:rel_e])
             rel_logits.append(rl)
             obj_logits_refined.append(ol)
@@ -150,7 +152,7 @@ class KERN(Module):
         self.pooling_dim = pooling_dim
 
         self.require_overlap = require_overlap_det and self.mode == 'sgdet'
-
+        # 物体检测器在构造函数中获取
         self.detector = ObjectDetector(
             classes=classes,
             mode=('proposals' if use_proposals else 'refinerels') if mode == 'sgdet' else 'gtbox',
@@ -178,7 +180,7 @@ class KERN(Module):
                 roi_fmap.append(Linear(4096, pooling_dim))
             self.roi_fmap = Sequential(*roi_fmap)
             self.roi_fmap_obj = load_vgg(pretrained=False).classifier
-
+        # GGNN 也在构造函数中获取
         self.ggnn_rel_reason = GGNNRelReason(mode=self.mode,
                                              num_obj_cls=len(self.classes),
                                              num_rel_cls=len(rel_classes),
@@ -236,6 +238,7 @@ class KERN(Module):
             prob dists, boxes, img inds, maxscores, classes
 
         """
+        # 前向传播先过个物体检测器
         result = self.detector(x, im_sizes, image_offset, gt_boxes, gt_classes, gt_rels, proposals,
                                train_anchor_inds, return_fmap=True)
         if result.is_none():
@@ -251,17 +254,17 @@ class KERN(Module):
                                                 image_offset, filter_non_overlap=True,
                                                 num_sample_per_gt=1)
 
-
         rel_inds = self.get_rel_inds(result.rel_labels, im_inds, boxes)
         rois = torch_cat((im_inds[:, None].float(), boxes), 1)
 
         result.obj_fmap = self.obj_feature_map(result.fmap.detach(), rois)
 
-        #breakpoint()
         vr = self.visual_rep(result.fmap.detach(), rois, rel_inds[:, 1:])
         # print(vr.shape)
 
-        result.rm_obj_dists, result.obj_preds, result.rel_dists, result.scpred_softmax, result.scent_softmax = self.ggnn_rel_reason(
+        # 调用 GGNN 进行预测，通过实例名调用 Callable 方法，也就是 forward 方法
+        (result.rm_obj_dists, result.obj_preds, result.rel_dists,
+         result.scpred_softmax, result.scent_softmax) = self.ggnn_rel_reason(
             im_inds=im_inds,
             obj_fmaps=result.obj_fmap,
             obj_logits=result.rm_obj_dists,
