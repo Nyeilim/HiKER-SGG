@@ -1,5 +1,4 @@
 import numpy as np
-import torch
 from torch import no_grad as torch_no_grad
 from torch.cuda.amp import autocast
 from tqdm import tqdm
@@ -7,21 +6,7 @@ from tqdm import tqdm
 from config import BOX_SCALE, IM_SCALE
 from lib.evaluation.sg_eval import BasicSceneGraphEvaluator, eval_entry
 from lib.exp.global_var import conf, detector, ind_to_predicates, train_full_loader, train_full
-from lib.my_util import adj_normalize
-from lib.pytorch_misc import optimistic_restore
 
-# Initialize the confusion matrix
-initial_conf_matrix = np.load(conf.MODEL.CONF_MAT_FREQ_TRAIN)
-initial_conf_matrix[0, :] = 0.0
-initial_conf_matrix[:, 0] = 0.0
-initial_conf_matrix[0, 0] = 1.0
-initial_conf_matrix = initial_conf_matrix / (initial_conf_matrix.sum(-1)[:, None] + 1e-8)
-initial_conf_matrix = adj_normalize(initial_conf_matrix)
-np.save('/output/data/misc/conf_mat_updated.npy', initial_conf_matrix)
-
-# ckpt = torch.load(conf.ckpt)
-# optimistic_restore(detector, ckpt['state_dict'], skip_clean=False)
-# detector.cuda()
 
 def train_evaluate():
     detector.eval()

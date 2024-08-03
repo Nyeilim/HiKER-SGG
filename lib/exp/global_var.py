@@ -1,12 +1,13 @@
+import numpy as np
 import os
 import sys
 import torch
-
 from tqdm import tqdm
 
 from config import ModelConfig
 from dataloaders.visual_genome import VGDataLoader, VG
 from lib.my_model_24 import KERN
+from lib.my_util import adj_normalize
 from lib.pytorch_misc import optimistic_restore
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 选择显卡
@@ -40,8 +41,8 @@ conf.num_workers = 9
 
 # ------------------------------------------------------------------------------------
 
-# For evaluating the confusion matrix; 这里 split 的目的好像是为了拿个 train_full 用于计算混淆矩阵
 # VG 类继承自 Dataset 类，把数据集拆分为训练集、验证集、测试集
+# For evaluating the confusion matrix; 这里 split 的目的好像是为了拿个 train_full 用于计算混淆矩阵
 train_full, _val, _test = VG.splits(num_val_im=conf.val_size, filter_duplicate_rels=True,
                                     use_proposals=conf.use_proposals,
                                     filter_non_overlap=conf.mode == 'sgdet', with_clean_classifier=False,
@@ -86,10 +87,22 @@ detector = KERN(classes=train.ind_to_classes, rel_classes=train.ind_to_predicate
                 class_volume=1.0, with_clean_classifier=True, with_transfer=True, sa=True, config=conf,
                 )
 
-# Freeze the detector
+# Freeze the detector 冻结参数
 for n, param in detector.detector.named_parameters():
     param.requires_grad = False
 
+# 加载模型并迁移至 GPU
 ckpt = torch.load(conf.ckpt)
 optimistic_restore(detector, ckpt['state_dict'], skip_clean=False)
 detector.cuda()
+
+# ------------------------------------------------------------------------------------
+
+# Initialize the confusion matrix 初始化混淆矩阵
+initial_conf_matrix = np.load(conf.MODEL.CONF_MAT_FREQ_TRAIN)
+initial_conf_matrix[0, :] = 0.0
+initial_conf_matrix[:, 0] = 0.0
+initial_conf_matrix[0, 0] = 1.0
+initial_conf_matrix = initial_conf_matrix / (initial_conf_matrix.sum(-1)[:, None] + 1e-8)
+initial_conf_matrix = adj_normalize(initial_conf_matrix)
+np.save('/output/data/misc/conf_mat_updated.npy', initial_conf_matrix)

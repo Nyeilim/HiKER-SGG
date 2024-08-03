@@ -1,5 +1,7 @@
 from apex.optimizers import FusedAdam, FusedSGD
+
 from lib.exp.global_var import detector, conf
+
 
 # 优化器
 def get_optim(lr):

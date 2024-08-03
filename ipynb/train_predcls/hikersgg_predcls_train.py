@@ -1,15 +1,14 @@
-import os
-
 import numpy as np
+import os
 import torch
 from apex import amp
 
 from lib.exp.conf_matrix_fn import train_evaluate
 from lib.exp.global_var import detector, write, conf
+from lib.exp.optim_fn import get_optim
 from lib.exp.train_fn import train_epoch
 from lib.exp.val_fn import val_epoch
 from lib.my_util import adj_normalize
-from lib.exp.optim_fn import get_optim
 
 alpha = 0.9
 start_epoch = 0
@@ -40,7 +39,7 @@ for epoch in range(start_epoch, end_epoch):
         for param_group in optimizer.param_groups:
             param_group['lr'] /= 10
 
-    rez = train_epoch(epoch)  # 开始训练
+    rez = train_epoch(epoch, optimizer)  # 开始训练
     losses_mean_epoch = rez.mean(axis=0)
     losses_mean_epoch_class = losses_mean_epoch['loss_class']
     losses_mean_epoch_rel = losses_mean_epoch['loss_rel']

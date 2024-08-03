@@ -1,7 +1,6 @@
-from time import time as time_time
-
 import pandas as pd
 from apex import amp
+from time import time as time_time
 from torch.cuda.amp import autocast
 from tqdm import tqdm
 
@@ -9,14 +8,14 @@ from lib.exp.global_var import conf, detector, train, train_loader, write
 from lib.pytorch_misc import clip_grad_norm
 
 
-def train_epoch(epoch_num):
+def train_epoch(epoch_num, optimizer):
     detector.train()
     tr = []
     start = time_time()
     prog_bar = tqdm(enumerate(train_loader), total=int(len(train) / train_loader.batch_size))
     for b, batch in prog_bar:
         # print(train_batch(batch, verbose=b % (conf.print_interval*10) == 0))
-        result, loss_dict = train_batch(batch, verbose=b % (conf.print_interval * 10) == 0)
+        result, loss_dict = train_batch(batch, optimizer, verbose=b % (conf.print_interval * 10) == 0)
         tr.append(loss_dict)
         '''
         if b % 100 == 0:
@@ -41,7 +40,7 @@ def train_epoch(epoch_num):
     return pd.DataFrame(tr)
 
 
-def train_batch(b, verbose=False):
+def train_batch(b, optimizer, verbose=False):
     """
     :param b: contains:
           :param imgs: the image, [batch_size, 3, IM_SIZE, IM_SIZE]
