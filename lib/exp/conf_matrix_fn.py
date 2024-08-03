@@ -19,9 +19,9 @@ initial_conf_matrix = initial_conf_matrix / (initial_conf_matrix.sum(-1)[:, None
 initial_conf_matrix = adj_normalize(initial_conf_matrix)
 np.save('/output/data/misc/conf_mat_updated.npy', initial_conf_matrix)
 
-ckpt = torch.load(conf.ckpt)
-optimistic_restore(detector, ckpt['state_dict'], skip_clean=False)
-
+# ckpt = torch.load(conf.ckpt)
+# optimistic_restore(detector, ckpt['state_dict'], skip_clean=False)
+# detector.cuda()
 
 def train_evaluate():
     detector.eval()

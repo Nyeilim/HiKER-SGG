@@ -5,14 +5,16 @@ import torch
 from apex import amp
 
 from lib.exp.conf_matrix_fn import train_evaluate
-from lib.exp.global_var import detector, optimizer, write, conf
+from lib.exp.global_var import detector, write, conf
 from lib.exp.train_fn import train_epoch
 from lib.exp.val_fn import val_epoch
 from lib.my_util import adj_normalize
+from lib.exp.optim_fn import get_optim
 
 alpha = 0.9
 start_epoch = 0
 end_epoch = 20
+optimizer = get_optim(conf.lr * conf.num_gpus * conf.batch_size)
 detector, optimizer = amp.initialize(detector, optimizer, opt_level="O0")
 
 conf_matrix_list = []

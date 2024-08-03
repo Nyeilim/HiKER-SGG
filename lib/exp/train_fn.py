@@ -5,7 +5,7 @@ from apex import amp
 from torch.cuda.amp import autocast
 from tqdm import tqdm
 
-from lib.exp.global_var import conf, detector, train, train_loader, write, optimizer
+from lib.exp.global_var import conf, detector, train, train_loader, write
 from lib.pytorch_misc import clip_grad_norm
 
 

@@ -1,12 +1,13 @@
 import os
 import sys
+import torch
 
-from apex.optimizers import FusedAdam, FusedSGD
 from tqdm import tqdm
 
 from config import ModelConfig
 from dataloaders.visual_genome import VGDataLoader, VG
 from lib.my_model_24 import KERN
+from lib.pytorch_misc import optimistic_restore
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 选择显卡
 codebase = '/output/HiKER-SGG/'  # 项目根目录
@@ -89,25 +90,6 @@ detector = KERN(classes=train.ind_to_classes, rel_classes=train.ind_to_predicate
 for n, param in detector.detector.named_parameters():
     param.requires_grad = False
 
-
-# ------------------------------------------------------------------------------------
-
-# 优化器
-def get_optim(lr):
-    # Lower the learning rate on the VGG fully connected layers by 1/10th. It's a hack, but it helps
-    # stabilize the models.
-    fc_params = [p for n, p in detector.named_parameters() if
-                 (n.startswith('roi_fmap') or 'clean' in n) and p.requires_grad]
-    non_fc_params = [p for n, p in detector.named_parameters() if
-                     not (n.startswith('roi_fmap') or 'clean' in n) and p.requires_grad]
-    params = [{'params': fc_params, 'lr': lr / 10.0}, {'params': non_fc_params}]
-
-    if conf.adam:
-        optimizer = FusedAdam(params, weight_decay=conf.adamwd, lr=lr, eps=1e-3)
-    else:
-        optimizer = FusedSGD(params, weight_decay=conf.l2, lr=lr, momentum=0.9)
-
-    return optimizer  # , scheduler
-
-
-optimizer = get_optim(conf.lr * conf.num_gpus * conf.batch_size)
+ckpt = torch.load(conf.ckpt)
+optimistic_restore(detector, ckpt['state_dict'], skip_clean=False)
+detector.cuda()
