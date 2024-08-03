@@ -10,6 +10,8 @@ from lib.my_model_24 import KERN
 from lib.my_util import adj_normalize
 from lib.pytorch_misc import optimistic_restore
 
+# ------------------------------------------------------------------------------------
+
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 选择显卡
 codebase = '/output/HiKER-SGG/'  # 项目根目录
 sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
