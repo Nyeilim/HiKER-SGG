@@ -2,6 +2,9 @@ import numpy as np
 import os
 import torch
 from apex import amp
+import sys
+
+sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
 
 from lib.exp.conf_matrix_fn import train_evaluate
 from lib.exp.global_var import detector, write, conf
