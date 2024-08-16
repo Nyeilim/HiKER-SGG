@@ -110,7 +110,7 @@ class ModelConfig(object):
 
         self.MODEL = Munch()
         self.MODEL.DEVICE = None
-        self.MODEL.CONF_MAT_FREQ_TRAIN = None
+        self.MODEL.CONF_MAT_FREQ_TRAIN = None   # 初始的谓词混淆矩阵，来自 SGG-G2S 的工作，由 MotifNet 生成
         self.MODEL.SHIFT_EOA = False
         self.MODEL.FOLD_EOA = False
         self.MODEL.MERGE_EOA_SA = False

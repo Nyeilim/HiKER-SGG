@@ -93,7 +93,7 @@ detector = KERN(classes=train.ind_to_classes, rel_classes=train.ind_to_predicate
 for n, param in detector.detector.named_parameters():
     param.requires_grad = False
 
-# 加载模型并迁移至 GPU
+# 加载模型并迁移至 GPU，这里最开始加载的其实是 GB-Net 的权重
 ckpt = torch.load(conf.ckpt)
 optimistic_restore(detector, ckpt['state_dict'], skip_clean=False)
 detector.cuda()
@@ -107,4 +107,4 @@ initial_conf_matrix[:, 0] = 0.0
 initial_conf_matrix[0, 0] = 1.0
 initial_conf_matrix = initial_conf_matrix / (initial_conf_matrix.sum(-1)[:, None] + 1e-8)
 initial_conf_matrix = adj_normalize(initial_conf_matrix)
-np.save('/output/data/misc/conf_mat_updated.npy', initial_conf_matrix)
+np.save('/output/data/misc/conf_mat_updated.npy', initial_conf_matrix)  # 这个玩意是拿来算概率转移矩阵的

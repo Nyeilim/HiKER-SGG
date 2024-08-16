@@ -190,6 +190,7 @@ class GGNN(Module):
 
             if self.with_transfer is True:
                 print("!!!!!!!!!With Confusion Matrix Channel!!!!!")
+                # 加载初始的谓词混淆矩阵
                 pred_adj_np = np.load(config.MODEL.CONF_MAT_FREQ_TRAIN)
                 # pred_adj_np = 1.0 - pred_adj_np
                 pred_adj_np[0, :] = 0.0
@@ -383,7 +384,7 @@ class GGNN(Module):
             if with_clean_classifier:
                 pred_cls_logits = torch_mm(self.fc_output_proj_img_pred_clean(nodes_img_pred), self.fc_output_proj_ont_pred_clean(nodes_ont_pred).t())
                 if t == self.time_step_num - 1:
-                    pred_adj_np = np.load('/output/data/misc/conf_mat_updated.npy')
+                    pred_adj_np = np.load('/output/data/misc/conf_mat_updated.npy')  # 加载概率转移矩阵
                     pred_adj_nor = torch_tensor(pred_adj_np, dtype=torch_float32, device=CUDA_DEVICE)
                     index = torch_zeros(60 + 8, requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
                     index[0] = True
@@ -405,6 +406,8 @@ class GGNN(Module):
                     superof_cls_score = F_softmax(pred_cls_logits[:, 63:66], dim=1)
                     superto_cls_score = F_softmax(pred_cls_logits[:, 66:68], dim=1)
                     pred_cls_logits = pred_cls_logits[:, :51]
+                    # 这行代码非常重要，好像就是概率转移 adaptive refinement，使用概率转移矩阵的置换矩阵来进行查表；
+                    # 然后概率转移之后 pred_cls_logits 每行的概率之和不等于 1，所以需要归一化，应该就是下面的操作
                     pred_cls_logits = (pred_adj_nor @ pred_cls_logits.T).T
 
                     scpred_score = torch_zeros_like(pred_cls_logits, requires_grad=True, device=CUDA_DEVICE, dtype=torch_float32)

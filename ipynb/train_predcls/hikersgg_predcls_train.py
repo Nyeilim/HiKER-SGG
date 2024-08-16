@@ -23,16 +23,16 @@ conf_matrix_list = []
 for epoch in range(start_epoch, end_epoch):
     if (epoch + 1) % 3 == 0:
         print('Evaluating new confusion matrix...')
-        conf_matrix = train_evaluate()  # 获取新的谓词混淆矩阵(见 3.7)
+        conf_matrix = train_evaluate()  # 获取新的谓词混淆矩阵(见 3.7)，这个玩意应该是对 curEpoch - 1 轮最终结果的评估
         conf_matrix[0, :] = 0.0
         conf_matrix[:, 0] = 0.0
         conf_matrix[0, 0] = 1.0
         conf_matrix = conf_matrix / (conf_matrix.sum(-1)[:, None] + 1e-8)
-        conf_matrix = adj_normalize(conf_matrix)
+        conf_matrix = adj_normalize(conf_matrix)  # 行归一化，对应公式 (18)
         conf_matrix_list.append(conf_matrix)
 
-        conf_matrix_old = np.load('/output/data/misc/conf_mat_updated.npy')
-        conf_matrix_new = conf_matrix_old * alpha + conf_matrix * (1 - alpha)
+        conf_matrix_old = np.load('/output/data/misc/conf_mat_updated.npy')  # 加载上轮 epoch 的转移概率矩阵
+        conf_matrix_new = conf_matrix_old * alpha + conf_matrix * (1 - alpha)  # 对应公式 (20)
         np.save('/output/data/misc/conf_mat_updated.npy', conf_matrix_new)
         np.save('/output/data/misc/conf/conf_mat_updated_{}.npy'.format(epoch), conf_matrix_new)
 
