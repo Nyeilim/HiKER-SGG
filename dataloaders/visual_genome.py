@@ -80,7 +80,7 @@ class VG(Dataset):
         )
 
         self.filenames = load_image_filenames(image_file)
-        self.filenames = [self.filenames[i] for i in np_where(self.split_mask)[0]]
+        self.filenames = [self.filenames[i] for i in np_where(self.split_mask)[0]]  # 把“取出图片”的名字挑出来
 
         if use_proposals:
             print("Loading proposals", flush=True)
@@ -111,13 +111,14 @@ class VG(Dataset):
         #         Hue(),
         #     ]))
 
+        # 这个是图片放缩的处理流程，会在 __getitem__ 里面使用
         tform = [
-            SquarePad(),
-            Resize(IM_SCALE),
-            ToTensor(),
-            Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            SquarePad(),    # 进行图像边缘填充，使图像变为正方形
+            Resize(IM_SCALE),   # 默认为 592, 说明图片将被放缩到 592x592
+            ToTensor(),     # 将图像数据转换为 PyTorch 张量格式
+            Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),   # 将张量归一化
         ]
-        self.transform_pipeline = Compose(tform)
+        self.transform_pipeline = Compose(tform)    # 将流程封装成函数
 
     @property
     def coco(self):
@@ -159,16 +160,19 @@ class VG(Dataset):
         test = cls('test', *args, **kwargs)
         return train, val, test
 
+    # 这个方法是 Dataset 的抽象方法，必须得实现这个方法
     def __getitem__(self, index):
         fname = self.filenames[index]
         cache_path = os_path_join(f'cached_{self.mode}', f'{fname}.pt')
         if self.caching is True and (self.use_cache is True or os_path_exists(cache_path)):
             return torch_load(cache_path)
 
+        # 按照文件名读取照片，以 RGB 像素格式读取为二进制数据
         image_unpadded = Image_open(fname).convert('RGB')
         w, h = image_unpadded.size
-        max_side = max(w, h)
+        max_side = max(w, h)    # 取长边
 
+        # 似乎是对图片后处理，添加损坏(corruptions)的逻辑
         if self.test_n:
             ################### Apply corruptions to the image ####################
             # image_unpadded = gaussian_noise(image_unpadded, severity=5)
@@ -192,7 +196,7 @@ class VG(Dataset):
             # image_unpadded = rain(image_unpadded, severity=5)
             # image_unpadded = dust(image_unpadded, severity=5)
 
-            image_unpadded = Image.fromarray(image_unpadded.astype(np.uint8))
+            image_unpadded = Image.fromarray(image_unpadded.astype(np.uint8))   # 将二进制数组转换为 PIL 图像对象
 
             # For debugging
             # print(image_unpadded.size)
@@ -257,10 +261,10 @@ class VG(Dataset):
             ##########################################################################
 
         # Optionally flip the image if we're doing training
-        flipped = self.is_train and np_random_random() > 0.5
+        flipped = self.is_train and np_random_random() > 0.5    # 翻转标记，有 50% 的概率翻转图像
         gt_boxes = self.gt_boxes[index].copy()
 
-        box_scale_factor = BOX_SCALE / max_side
+        box_scale_factor = BOX_SCALE / max_side # 计算放缩因子，因为待会要对图像放缩，所以 bbox 也得放缩
         # Boxes are already at BOX_SCALE
         if self.is_train:
 
@@ -273,6 +277,7 @@ class VG(Dataset):
             # # crop the image for data augmentation
             # image_unpadded, gt_boxes = random_crop(image_unpadded, gt_boxes, BOX_SCALE, round_boxes=True)
 
+        # 翻转图像
         if flipped:
             scaled_w = int(box_scale_factor * float(w))
             # print("Scaled w is {}".format(scaled_w))
@@ -289,7 +294,8 @@ class VG(Dataset):
             im_size = (IM_SCALE, IM_SCALE, img_scale_factor)
 
         if PRINTING: print(f'visual_genome: after: im_size = {im_size}')
-        gt_rels = self.relationships[index].copy()
+        gt_rels = self.relationships[index].copy()  # 获取关系（三元组）
+        # 使用 Set 过滤掉重复关系
         if self.filter_duplicate_rels:
             # Filter out dupes!
             assert self.mode == 'train'
@@ -300,16 +306,17 @@ class VG(Dataset):
             gt_rels = [(k[0], k[1], np_random_choice(v)) for k,v in all_rel_sets.items()]
             gt_rels = np_array(gt_rels)
 
+        # 封装最后返回的数据结构
         entry = {
-            'img': self.transform_pipeline(image_unpadded),
-            'img_size': im_size,
-            'gt_boxes': gt_boxes,
-            'gt_classes': self.gt_classes[index].copy(),
-            'gt_relations': gt_rels,
+            'img': self.transform_pipeline(image_unpadded), # 放缩后的图像
+            'img_size': im_size,    # 放缩后尺寸及放缩比例
+            'gt_boxes': gt_boxes,   # bbox
+            'gt_classes': self.gt_classes[index].copy(),    # s,o 索引标注
+            'gt_relations': gt_rels,    # 关系（三元组）
             'scale': IM_SCALE / BOX_SCALE,  # Multiply the boxes by this.
-            'index': index,
-            'flipped': flipped,
-            'fn': fname,
+            'index': index, # 索引下标
+            'flipped': flipped, # 翻转标记
+            'fn': fname,    # 文件名
         }
 
         if self.rpn_rois is not None:
@@ -393,6 +400,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
     :param filter_empty_rels: (will be filtered otherwise.)
     :param filter_non_overlap: If training, filter images that dont overlap.
     :return: image_index: numpy array corresponding to the index of images we're using
+             split_mask: numpy boolean array of length 108073 tells you whether every image in dataset is selected.
              boxes: List where each element is a [num_gt, 4] array of ground
                     truth boxes (x1, y1, x2, y2)
              gt_classes: List where each element is a [num_gt] array of classes
@@ -402,17 +410,19 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
     if mode not in ('train', 'val', 'test'):
         raise ValueError('{} invalid'.format(mode))
 
+    # 这里的 graphs_file 就是数据集的二进制标注文件
     with h5py_File(graphs_file, 'r') as roi_h5:
-        data_split = roi_h5['split'][:]
+        data_split = roi_h5['split'][:] # 长度为 108073 的数组，每个元素为 0(代表训练集) 或者 2(代表测试集)
         split = 2 if mode == 'test' else 0
-        split_mask = data_split == split
+        split_mask = data_split == split # 长度为 108073 的数组，每个位置为 True 或者 False
 
-        # Filter out images without bounding boxes
-        split_mask &= roi_h5['img_to_first_box'][:] >= 0
+        # Filter out images without bounding boxes; 过滤掉没有 bbox 的图片
+        split_mask &= roi_h5['img_to_first_box'][:] >= 0 # 没有 bbox 的图片，这项会被标记为 -1
         if filter_empty_rels:
-            split_mask &= roi_h5['img_to_first_rel'][:] >= 0
+            split_mask &= roi_h5['img_to_first_rel'][:] >= 0 # 没有 rel 的图片，这项会被标记为 -1
 
-        image_index = np_where(split_mask)[0]
+        image_index = np_where(split_mask)[0] # 拿到筛选完毕的图片对应下标；np_where 的返回值类似 ([],)；因此我们要拿到元组内的数组
+        # 根据设置再决定取多少张图片，把取出图片的下标拿到
         if num_im > -1:
             image_index = image_index[:num_im]
         if num_val_im > 0:
@@ -421,28 +431,37 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
             elif mode == 'train':
                 image_index = image_index[num_val_im:]
 
-
+        # 重新初始化 mask 标记，然后把取出图片的下标对应的元素标记成 True
         split_mask = np_zeros_like(data_split, dtype=bool)
         split_mask[image_index] = True
 
         # Get box information
-        all_labels = roi_h5['labels'][:, 0]
+        # 数据集中共有 1145398 个 bbox 和对应的物体标注(labels)，其中属于某张图片的 bbox 会被排列在连续的索引中
+        all_labels = roi_h5['labels'][:, 0] # 会拿到 shape(1145398,) 的一维数组，形如 [136,114,...]
+        # 会拿到 shape(1145398,4) 的二维数组，形如 [[511, 356, 1023, 713], [...], ...]，其中四个数字分别代表 [xc,yc,w,h]
         all_boxes = roi_h5['boxes_{}'.format(BOX_SCALE)][:]  # will index later
-        assert np_all(all_boxes[:, :2] >= 0)  # sanity check
-        assert np_all(all_boxes[:, 2:] > 0)  # no empty box
+        assert np_all(all_boxes[:, :2] >= 0)  # sanity check; 判断中心坐标是否 >= 0
+        assert np_all(all_boxes[:, 2:] > 0)  # no empty box; 判断高宽是否 > 0
 
-        # convert from xc, yc, w, h to x1, y1, x2, y2
+        # convert from xc, yc, w, h to x1, y1, x2, y2; 将中心、高宽数据转换为左上角、右下角坐标数据
         all_boxes[:, :2] = all_boxes[:, :2] - all_boxes[:, 2:] / 2
         all_boxes[:, 2:] = all_boxes[:, :2] + all_boxes[:, 2:]
 
+        # 前面说到属于某张图片的 bbox, rel 会被排列在连续的索引中，这里的 first, last 其实就是来框定这个索引区间（左右闭合）的
+        # 比如 roi_h5['img_to_first_box'][1] = 15, roi_h5['img_to_first_box'][1] = 21
+        # 那我们就可以知道索引为 1 的图片，它的 bbox 是 all_boxes[15:21+1, :]；rel 同理
+        # 至于 split_mask 其实就是我们的“取出图片”，它这里使用的是 numpy 的高级索引语法
+        # 把与“取出图片”相关的信息收集起来，然后放到单独的 List 中，顺序第0张【而不是索引为0】“取出图片”的对应信息会放到 List[0]
         im_to_first_box = roi_h5['img_to_first_box'][split_mask]
         im_to_last_box = roi_h5['img_to_last_box'][split_mask]
         im_to_first_rel = roi_h5['img_to_first_rel'][split_mask]
         im_to_last_rel = roi_h5['img_to_last_rel'][split_mask]
 
-        # load relation labels
-        _relations = roi_h5['relationships'][:]
-        _relation_predicates = roi_h5['predicates'][:, 0]
+        # load relation labels; 数据集中一共标注了 622705 个关系
+        _relations = roi_h5['relationships'][:] # shape(622705, 2)，大胆猜测这个是三元组 <s,p,o> 中的 <s,o>，每个元素是 bbox 索引
+        _relation_predicates = roi_h5['predicates'][:, 0] # shape(622705,)，大胆猜测这个是三元组 <s,p,o> 中的 <p>，每个元素是谓词索引
+
+    # 上面这段都是对二进制标注文件的处理，下面这个是对数据一致性确认，确保数据能够匹配上
     assert (im_to_first_rel.shape[0] == im_to_last_rel.shape[0])
     assert (_relations.shape[0] == _relation_predicates.shape[0])  # sanity check
 
@@ -455,12 +474,13 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
     pred_num = 15
     pred_count=0
     # with open('./datasets/vg/VG-SGG-dicts-with-attri-info.json','r') as f:
+    # 这个加载进来的是 VG-SGG-dicts.json 文件
     with open(dict_file,'r') as f:
         vg_dict_info = json_load(f)
 
     predicates_tree = vg_dict_info['predicate_count'] # 拿到 VG-SGG-dicts.json 里面的 predicate_count
-    #predicates_tree = json.load(open('./datasets/vg/predicate_wikipedia_count.json', 'r'))
-    # 根据每个谓词的 count 数从大到小排序，最终出来个列表，每个元素都是个 map.item()，也就是元组，类似 ('on', 712409)
+    # predicates_tree = json.load(open('./datasets/vg/predicate_wikipedia_count.json', 'r'))
+    # 根据每个谓词的 count 数从大到小排序，最终出来个列表，每个元素都是个 map.entry，也就是元组，类似 ('on', 712409)
     predicates_sort = sorted(predicates_tree.items(), key=lambda x:x[1], reverse=True)
     # 这里大概的意思是挑选出 count 在前 15(pred_num) 的谓词，放到 pred_topk 里面作为列表
     for pred_i in predicates_sort:
@@ -469,37 +489,48 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
         pred_topk.append(str(pred_i[0])) # 取 0 就是取到 item ('on', 712409) 中的谓词 'on'
         pred_count += 1
 
+    # 这里开始就是使用 BPL Method 的逻辑
     if with_clean_classifier:
         print('Dataloader using BPL')
-        root_classes = pred_topk # 类似 ['on', 'has', 'in' ... 'wears', 'standing on', 'in front of']
+        root_classes = pred_topk # 类似 ['on', 'has', 'in' ... 'wears', 'standing on', 'in front of']，就是论文说的“头部谓词”
     else:
         print('Dataloader NOT using BPL')
         root_classes = None
+    # 所以这个 get_state 是用来干嘛的？重置位？
     if get_state:
         root_classes = None
     root_classes_count = {}
     leaf_classes_count = {}
     all_classes_count = {}
+    # image_index 的元素内容是“取出图片”的索引【但是用不上】，索引是“取出图片”的顺序号
     for i in range(len(image_index)):
+        # 取出单张图片的信息
         i_obj_start = im_to_first_box[i]
         i_obj_end = im_to_last_box[i]
         i_rel_start = im_to_first_rel[i]
         i_rel_end = im_to_last_rel[i]
 
+        # 取出单张图片的 bbox 和 labels
         boxes_i = all_boxes[i_obj_start: i_obj_end + 1, :]
         gt_classes_i = all_labels[i_obj_start: i_obj_end + 1]
         # gt_attributes_i = all_attributes[i_obj_start: i_obj_end + 1, :]
 
         if i_rel_start >= 0:
             predicates = _relation_predicates[i_rel_start: i_rel_end + 1]
+            # 这里可以理解成，本来 _relations 里面装的是每个 bbox 的绝对索引，转换为对于某个图片 i_obj_start 的相对索引
             obj_idx = _relations[i_rel_start: i_rel_end + 1] - i_obj_start  # range is [0, num_box)
             assert np_all(obj_idx >= 0)
             assert np_all(obj_idx < boxes_i.shape[0])
-            rels = np_column_stack((obj_idx, predicates))  # (num_rel, 3), representing sub, obj, and pred
+            rels = np_column_stack((obj_idx, predicates))  # shape(num_rel, 3), each row representing sub, obj, and pred
         else:
             assert not filter_empty_rels
             rels = np_zeros((0, 3), dtype=np_int32)
 
+        # ---------------------------------------------------------------------------
+        # 外层循环在运行完上面的代码后，其实就已经完成 bbox，rel 的整理，下面分别是 重叠过滤 以及 BPL
+        # ---------------------------------------------------------------------------
+
+        # 在训练时，是否过滤掉没有重叠 bbox 的图像，不重叠的 bbox 常常被认为是没有关系的
         if filter_non_overlap:
             assert mode == 'train'
             # construct BoxList object to apply boxlist_iou method
@@ -515,7 +546,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
                 split_mask[image_index[i]] = 0
                 continue
 
-        # 下面这段就是 BPL 算法的内容，不知道它在干嘛
+        # 下面这段就是 BPL 算法的内容
         if root_classes is not None and mode == 'train':
             # print('old boxes: ', boxes_i)
             # print('old gt_classes_i: ', gt_classes_i)
@@ -525,13 +556,16 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
             box_num = 0
             retain_box = []
             # print('rels: ',rels)
+            # 遍历此图中的每个关系，并根据其属于头部谓词还是尾部谓词，执行不同逻辑，判断将其是否加入 rel_temp
             for rel_i in rels:
-                rel_i_pred = ind_to_predicates[rel_i[2]]
+                rel_i_pred = ind_to_predicates[rel_i[2]] # 将谓词索引翻译成具体的谓词，比如 31 -> 'on'
+                # 这个 all_classes_count 是循环外定义的 Map<string,int> 用来存放谓词的计数
                 if rel_i_pred not in all_classes_count:
                     all_classes_count[rel_i_pred] = 0
                 all_classes_count[rel_i_pred] = all_classes_count[rel_i_pred] + 1
+                # rel_i_pred 作为尾部谓词或者“无关系”的逻辑，谓词索引 0 表示 'no_relationship'
                 if rel_i_pred not in root_classes or rel_i[2] == 0:
-                    rel_i_leaf = rel_i
+                    rel_i_leaf = rel_i  # 添加为尾部谓词
 
                     # if rel_i[0] not in boxmap_old2new:
                     # boxmap_old2new[rel_i[0]] = box_num
@@ -545,12 +579,14 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
                     # rel_i_new[1] = boxmap_old2new[rel_i[1]]
                     if rel_i_pred not in leaf_classes_count:
                         leaf_classes_count[rel_i_pred] = 0
-                    leaf_classes_count[rel_i_pred] = leaf_classes_count[rel_i_pred] + 1
-                    rel_temp.append(rel_i_leaf)
+                    leaf_classes_count[rel_i_pred] = leaf_classes_count[rel_i_pred] + 1 # 统计尾部谓词数
+                    rel_temp.append(rel_i_leaf) # 添加该三元组（或者说关系）到临时列表，作为训练集的候选数据
+                # rel_i_pred 作为头部谓词的逻辑
                 if rel_i_pred in root_classes:
                     rel_i_root = rel_i
                     if rel_i_pred not in root_classes_count:
                         root_classes_count[rel_i_pred] = 0
+                    # 这里人为限定：包含某个头部谓词的三元组，其样本数量不能超过 1000
                     if root_classes_count[rel_i_pred] < 1000: # Adjust the intensity of BPL here
                         rel_temp.append(rel_i_root)
                         root_classes_count[rel_i_pred] = root_classes_count[rel_i_pred] + 1
@@ -558,17 +594,20 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
                 split_mask[image_index[i]] = 0
                 continue
             else:
-                rels = np_array(rel_temp, dtype=np_int32)
+                rels = np_array(rel_temp, dtype=np_int32)   # 将 rel_temp 转正为 rels
 
             # retain_box = np.array(retain_box, dtype=np.int64)
             # boxes_i = boxes_i[retain_box]
             # gt_classes_i = gt_classes_i[retain_box]
             # gt_attributes_i = gt_attributes_i[retain_box]
 
+        # 把此图中拿到的 bbox 和 rel 添加到总列表，开始处理下张图片
         boxes.append(boxes_i)
         gt_classes.append(gt_classes_i)
         # gt_attributes.append(gt_attributes_i)
         relationships.append(rels)
+
+    # 打印信息
     if PRINTING: print('mode: ',mode)
     if PRINTING: print('root_classes_count: ', root_classes_count)
     count_list = [0,]

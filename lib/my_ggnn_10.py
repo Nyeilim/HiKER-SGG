@@ -28,10 +28,10 @@ def arange(num):
     return torch_arange(num, dtype=torch_int64, device=CUDA_DEVICE)
 
 class GGNN(Module):
-    def __init__(self, emb_path, graph_path, time_step_num=3, hidden_dim=512, \
-                 output_dim=512, use_embedding=True, use_knowledge=True, \
-                 refine_obj_cls=False, num_ents=151, num_preds=51, \
-                 config=None, with_clean_classifier=None, with_transfer=None, \
+    def __init__(self, emb_path, graph_path, time_step_num=3, hidden_dim=512,
+                 output_dim=512, use_embedding=True, use_knowledge=True,
+                 refine_obj_cls=False, num_ents=151, num_preds=51,
+                 config=None, with_clean_classifier=None, with_transfer=None,
                  num_obj_cls=None, num_rel_cls=None, sa=None, lrga=None):
         super(GGNN, self).__init__()
         self.time_step_num = time_step_num
@@ -44,6 +44,13 @@ class GGNN(Module):
         self.in_channels = hidden_dim
         self.hidden_channels = hidden_dim
         self.out_channels = hidden_dim
+
+        self.sa = sa
+        self.use_ontological_adjustment = config.MODEL.USE_ONTOLOGICAL_ADJUSTMENT
+        self.normalize_eoa = config.MODEL.NORMALIZE_EOA
+        self.shift_eoa = config.MODEL.SHIFT_EOA
+        self.fold_eoa = config.MODEL.FOLD_EOA
+        self.merge_eoa_sa = config.MODEL.MERGE_EOA_SA
 
         if self.use_lrga is True:
             self.attention = ModuleList()
@@ -149,15 +156,6 @@ class GGNN(Module):
 
         self.debug_info = {}
 
-        self.with_clean_classifier = with_clean_classifier
-        self.with_transfer = with_transfer
-        self.sa = sa
-        self.use_ontological_adjustment = config.MODEL.USE_ONTOLOGICAL_ADJUSTMENT
-        self.normalize_eoa = config.MODEL.NORMALIZE_EOA
-        self.shift_eoa = config.MODEL.SHIFT_EOA
-        self.fold_eoa = config.MODEL.FOLD_EOA
-        self.merge_eoa_sa = config.MODEL.MERGE_EOA_SA
-
         if self.use_ontological_adjustment is True:
             print('my_ggnn_10: using use_ontological_adjustment')
             ontological_preds = self.adjmtx_pred2pred[3, :, :]
@@ -190,6 +188,7 @@ class GGNN(Module):
 
             if self.with_transfer is True:
                 print("!!!!!!!!!With Confusion Matrix Channel!!!!!")
+                # 加载初始的谓词混淆矩阵
                 pred_adj_np = np.load(config.MODEL.CONF_MAT_FREQ_TRAIN)
                 # pred_adj_np = 1.0 - pred_adj_np
                 pred_adj_np[0, :] = 0.0
@@ -383,7 +382,7 @@ class GGNN(Module):
             if with_clean_classifier:
                 pred_cls_logits = torch_mm(self.fc_output_proj_img_pred_clean(nodes_img_pred), self.fc_output_proj_ont_pred_clean(nodes_ont_pred).t())
                 if t == self.time_step_num - 1:
-                    pred_adj_np = np.load('/output/data/misc/conf_mat_updated.npy')
+                    pred_adj_np = np.load('/output/data/misc/conf_mat_updated.npy')  # 加载概率转移矩阵
                     pred_adj_nor = torch_tensor(pred_adj_np, dtype=torch_float32, device=CUDA_DEVICE)
                     index = torch_zeros(60 + 8, requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
                     index[0] = True
@@ -405,6 +404,8 @@ class GGNN(Module):
                     superof_cls_score = F_softmax(pred_cls_logits[:, 63:66], dim=1)
                     superto_cls_score = F_softmax(pred_cls_logits[:, 66:68], dim=1)
                     pred_cls_logits = pred_cls_logits[:, :51]
+                    # 这行代码非常重要，好像就是概率转移 adaptive refinement，使用概率转移矩阵的置换矩阵来进行查表；
+                    # 然后概率转移之后 pred_cls_logits 每行的概率之和不等于 1，所以需要归一化，应该就是下面的操作
                     pred_cls_logits = (pred_adj_nor @ pred_cls_logits.T).T
 
                     scpred_score = torch_zeros_like(pred_cls_logits, requires_grad=True, device=CUDA_DEVICE, dtype=torch_float32)

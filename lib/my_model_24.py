@@ -32,10 +32,12 @@ class GGNNRelReason(Module):
     Module for relationship classification.
     场景图生成本质上是谓词分类任务
     """
-    def __init__(self, graph_path, emb_path, mode='sgdet', num_obj_cls=151, num_rel_cls=51, obj_dim=4096, rel_dim=4096,
-                time_step_num=3, hidden_dim=512, output_dim=512, use_knowledge=True, use_embedding=True, refine_obj_cls=False, with_clean_classifier=None, with_transfer=None, sa=None, config=None):
+    def __init__(self, graph_path, emb_path, mode='sgdet', num_obj_cls=151, num_rel_cls=51, obj_dim=4096,
+                 rel_dim=4096,time_step_num=3, hidden_dim=512, output_dim=512,
+                 use_knowledge=True, use_embedding=True, refine_obj_cls=False,
+                 with_clean_classifier=None, with_transfer=None, sa=None, config=None):
 
-        super(GGNNRelReason, self).__init__()
+        super(GGNNRelReason, self).__init__()   # 这行代码有必要？
         assert mode in MODES
         self.mode = mode
         self.with_clean_classifier = with_clean_classifier
@@ -54,7 +56,9 @@ class GGNNRelReason(Module):
         # 实际的 GGNN 内核
         self.ggnn = GGNN(time_step_num=time_step_num, hidden_dim=hidden_dim, output_dim=output_dim,
                          emb_path=emb_path, graph_path=graph_path, refine_obj_cls=refine_obj_cls,
-                         use_knowledge=use_knowledge, use_embedding=use_embedding, config=config, with_clean_classifier=with_clean_classifier, with_transfer=with_transfer, sa=sa, num_obj_cls=num_obj_cls, num_rel_cls=num_rel_cls)
+                         use_knowledge=use_knowledge, use_embedding=use_embedding, config=config,
+                         with_clean_classifier=self.with_clean_classifier, with_transfer=self.with_transfer,
+                         sa=sa, num_obj_cls=self.num_obj_cls, num_rel_cls=self.num_rel_cls)
 
     # 这个 forward 方法是 Module 抽象类里面待实现的 Callable 方法
     def forward(self, im_inds, obj_fmaps, obj_logits, rel_inds, vr, obj_labels=None, boxes_per_cls=None):

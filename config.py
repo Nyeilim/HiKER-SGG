@@ -34,7 +34,7 @@ PROPOSAL_FN = stanford_metadata_path('proposals.h5')
 MODES = ('sgdet', 'sgcls', 'predcls')
 
 BOX_SCALE = 1024  # Scale at which we have the boxes
-IM_SCALE = 592      # Our images will be resized to this res without padding
+IM_SCALE = 592    # Our images will be resized to this res without padding
 
 # Proposal assignments
 BG_THRESH_HI = 0.5
@@ -110,7 +110,7 @@ class ModelConfig(object):
 
         self.MODEL = Munch()
         self.MODEL.DEVICE = None
-        self.MODEL.CONF_MAT_FREQ_TRAIN = None
+        self.MODEL.CONF_MAT_FREQ_TRAIN = None   # 初始的谓词混淆矩阵，来自 SGG-G2S 的工作，由 MotifNet 生成
         self.MODEL.SHIFT_EOA = False
         self.MODEL.FOLD_EOA = False
         self.MODEL.MERGE_EOA_SA = False

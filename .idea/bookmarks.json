@@ -1,0 +1,34 @@
+{
+  "HiKER-SGG": [
+    {
+      "fileDescriptor": "$/dataloaders/visual_genome.py",
+      "linenumber": 492,
+      "name": "BPL: 加载数据集平衡",
+      "bookmarkType": "DIGIT_2"
+    },
+    {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 181,
+      "name": "BPL: GGNN Init 中的 IF 语句",
+      "bookmarkType": "LETTER_B"
+    },
+    {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 38,
+      "name": "BPL\u0026SA: 在 GGNN 内核中被使用的地方",
+      "bookmarkType": "LETTER_A"
+    },
+    {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 408,
+      "name": "SA: 概率转移代码",
+      "bookmarkType": "DIGIT_1"
+    },
+    {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 251,
+      "name": "BPL\u0026\u0026SA: 被赋值给局部变量",
+      "bookmarkType": "LETTER_C"
+    }
+  ]
+}
