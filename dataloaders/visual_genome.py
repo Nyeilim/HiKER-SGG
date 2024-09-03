@@ -159,12 +159,14 @@ class VG(Dataset):
         test = cls('test', *args, **kwargs)
         return train, val, test
 
+    # 这个方法是 Dataset 的抽象方法，必须得实现这个方法
     def __getitem__(self, index):
         fname = self.filenames[index]
         cache_path = os_path_join(f'cached_{self.mode}', f'{fname}.pt')
         if self.caching is True and (self.use_cache is True or os_path_exists(cache_path)):
             return torch_load(cache_path)
 
+        # 读取照片
         image_unpadded = Image_open(fname).convert('RGB')
         w, h = image_unpadded.size
         max_side = max(w, h)
@@ -459,7 +461,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
         vg_dict_info = json_load(f)
 
     predicates_tree = vg_dict_info['predicate_count'] # 拿到 VG-SGG-dicts.json 里面的 predicate_count
-    #predicates_tree = json.load(open('./datasets/vg/predicate_wikipedia_count.json', 'r'))
+    # predicates_tree = json.load(open('./datasets/vg/predicate_wikipedia_count.json', 'r'))
     # 根据每个谓词的 count 数从大到小排序，最终出来个列表，每个元素都是个 map.item()，也就是元组，类似 ('on', 712409)
     predicates_sort = sorted(predicates_tree.items(), key=lambda x:x[1], reverse=True)
     # 这里大概的意思是挑选出 count 在前 15(pred_num) 的谓词，放到 pred_topk 里面作为列表

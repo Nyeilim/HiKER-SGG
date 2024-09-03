@@ -68,13 +68,14 @@ train, val, test = VG.splits(num_val_im=conf.val_size, filter_duplicate_rels=Tru
                              filter_non_overlap=conf.mode == 'sgdet', with_clean_classifier=True,
                              get_state=False)
 
-# 这里的两个集合就是正常的 train、val, 和上面的 train_full 不一样
+# 这里的两个集合就是正常的 train & val，和上面的 train_full 不一样
 train_loader, val_loader = VGDataLoader.splits(train, val, mode='rel',
                                                batch_size=conf.batch_size,
                                                num_workers=conf.num_workers,
                                                num_gpus=conf.num_gpus,
                                                pin_memory=True)
 
+# 拿到 VG-SGG-dicts.json 里的 idx_to_predicates
 ind_to_predicates = train.ind_to_predicates  # ind_to_predicates[0] means no relationship
 
 # ------------------------------------------------------------------------------------
@@ -84,9 +85,11 @@ detector = KERN(classes=train.ind_to_classes, rel_classes=train.ind_to_predicate
                 num_gpus=conf.num_gpus, mode=conf.mode, require_overlap_det=True,
                 use_resnet=conf.use_resnet, use_proposals=conf.use_proposals, pooling_dim=conf.pooling_dim,
                 ggnn_rel_time_step_num=3, ggnn_rel_hidden_dim=1024, ggnn_rel_output_dim=None,
-                # 这三个参数是什么？
+                # 存储着 hierarchical knowledge graphs 中的各种边，ent2ent, pred2pred, ent2pred, pred2ent
                 graph_path=os.path.join(codebase, 'graphs/005/all_edges_with_sccluster2_pred_ent.pkl'),
+                # 存储着各个 ent, pred 节点的 embedding
                 emb_path=os.path.join(codebase, 'graphs/001/emb_mtx_with_sccluster2_pred_ent.pkl'),
+                # 存储着训练集中每个谓词的词频
                 rel_counts_path=os.path.join(codebase, 'graphs/001/pred_counts.pkl'),
                 use_knowledge=True, use_embedding=True, refine_obj_cls=False,
                 class_volume=1.0, with_clean_classifier=True, with_transfer=True, sa=True, config=conf,
