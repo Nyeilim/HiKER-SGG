@@ -16,9 +16,10 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 选择显卡
 codebase = '/output/HiKER-SGG/'  # 项目根目录
 sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
 exp_name = 'hikersgg_predcls_train'
-write = tqdm.write  # 函数引用赋值，好想是用来打印日志
+write = tqdm.write  # 函数引用赋值，用来打印日志
 
 # 创建配置类，加载配置
+# vgrel-11 是 GB-Net 提供的预训练模型，HiKER-SGG 的核心部分(GNN)和 GB-Net 非常接近
 conf = ModelConfig(f'''
 -m predcls -p 2500 -clip 5
 -tb_log_dir ../data/summaries/kern_predcls/{exp_name}
@@ -31,7 +32,8 @@ conf = ModelConfig(f'''
 -lr 1e-4
 ''')
 
-# 修改部分配置，这个 .MODEL 是个 Munch 对象实例，Munch 类的行为逻辑就好像字典，不过他是以 .属性名 访问值
+# 修改部分配置，这个 .MODEL 是个 Munch 对象实例，Munch 类的行为逻辑就好像字典，不过它是以 .属性名 访问值
+# LRGA 不知道是什么
 conf.MODEL.CONF_MAT_FREQ_TRAIN = '/output/data/misc/conf_mat_freq_train.npy'  # modified
 conf.MODEL.LRGA.USE_LRGA = False
 conf.MODEL.USE_ONTOLOGICAL_ADJUSTMENT = False
@@ -43,8 +45,8 @@ conf.num_workers = 9
 
 # ------------------------------------------------------------------------------------
 
-# VG 类继承自 Dataset 类，把数据集拆分为训练集、验证集、测试集
-# For evaluating the confusion matrix; 这里 split 的目的好像是为了拿个 train_full 用于计算混淆矩阵
+# VG 类继承自 Dataset 类，把数据集拆分为训练集、验证集、测试集，参数作为关键字参数传入
+# take train_full for evaluating the confusion matrix;
 train_full, _val, _test = VG.splits(num_val_im=conf.val_size, filter_duplicate_rels=True,
                                     use_proposals=conf.use_proposals,
                                     filter_non_overlap=conf.mode == 'sgdet', with_clean_classifier=False,
@@ -60,12 +62,13 @@ _, train_full_loader = VGDataLoader.splits(train_full, train_full, mode='rel',
 # ------------------------------------------------------------------------------------
 
 # 这里的 split 的目的好像是用来训练
-# 这里的 with_clean_classifier 是 True，它和一个叫 BPL 的东西相关，他在论文的 [22] 中被提到
+# with_clean_classifier==True 表示使用 BPL Method，该方法出自论文 SGG-G2S
 train, val, test = VG.splits(num_val_im=conf.val_size, filter_duplicate_rels=True,
                              use_proposals=conf.use_proposals,
-                             filter_non_overlap=conf.mode == 'sgdet', with_clean_classifier=True, get_state=False)
+                             filter_non_overlap=conf.mode == 'sgdet', with_clean_classifier=True,
+                             get_state=False)
 
-# 这里的两个集合就是正常的 train val, 和上面的 train_full 不一样
+# 这里的两个集合就是正常的 train、val, 和上面的 train_full 不一样
 train_loader, val_loader = VGDataLoader.splits(train, val, mode='rel',
                                                batch_size=conf.batch_size,
                                                num_workers=conf.num_workers,
