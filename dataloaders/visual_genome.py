@@ -404,6 +404,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
     if mode not in ('train', 'val', 'test'):
         raise ValueError('{} invalid'.format(mode))
 
+    # 这里的 graphs_file 就是数据集的二进制标注文件
     with h5py_File(graphs_file, 'r') as roi_h5:
         data_split = roi_h5['split'][:]
         split = 2 if mode == 'test' else 0
@@ -445,6 +446,8 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
         # load relation labels
         _relations = roi_h5['relationships'][:]
         _relation_predicates = roi_h5['predicates'][:, 0]
+
+    # 上面这段都是对二进制标注文件的处理
     assert (im_to_first_rel.shape[0] == im_to_last_rel.shape[0])
     assert (_relations.shape[0] == _relation_predicates.shape[0])  # sanity check
 
@@ -471,6 +474,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
         pred_topk.append(str(pred_i[0])) # 取 0 就是取到 item ('on', 712409) 中的谓词 'on'
         pred_count += 1
 
+    # 这里开始就是使用 BPL Method 的逻辑
     if with_clean_classifier:
         print('Dataloader using BPL')
         root_classes = pred_topk # 类似 ['on', 'has', 'in' ... 'wears', 'standing on', 'in front of']
