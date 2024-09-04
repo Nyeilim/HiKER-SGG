@@ -406,16 +406,17 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
 
     # 这里的 graphs_file 就是数据集的二进制标注文件
     with h5py_File(graphs_file, 'r') as roi_h5:
-        data_split = roi_h5['split'][:]
+        data_split = roi_h5['split'][:] # 长度为 108073 的数组，每个元素为 0(代表训练集) 或者 2(代表测试集)
         split = 2 if mode == 'test' else 0
-        split_mask = data_split == split
+        split_mask = data_split == split # 长度为 108073 的数组，每个位置为 True 或者 False
 
         # Filter out images without bounding boxes
-        split_mask &= roi_h5['img_to_first_box'][:] >= 0
+        split_mask &= roi_h5['img_to_first_box'][:] >= 0 # 没有 bbox 的图片，这项会被标记为 -1
         if filter_empty_rels:
-            split_mask &= roi_h5['img_to_first_rel'][:] >= 0
+            split_mask &= roi_h5['img_to_first_rel'][:] >= 0 # 没有 rel 的图片，这项会被标记为 -1
 
-        image_index = np_where(split_mask)[0]
+        image_index = np_where(split_mask)[0] # 拿到筛选完毕的图片对应下标
+        # 根据设置再决定取多少张图片，把取出图片的下标拿到
         if num_im > -1:
             image_index = image_index[:num_im]
         if num_val_im > 0:
@@ -424,7 +425,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
             elif mode == 'train':
                 image_index = image_index[num_val_im:]
 
-
+        # 重新初始化 mask 标记，然后把取出图片的下标对应的元素标记成 True
         split_mask = np_zeros_like(data_split, dtype=bool)
         split_mask[image_index] = True
 
