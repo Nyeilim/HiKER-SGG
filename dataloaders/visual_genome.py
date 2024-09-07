@@ -415,7 +415,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
         if filter_empty_rels:
             split_mask &= roi_h5['img_to_first_rel'][:] >= 0 # 没有 rel 的图片，这项会被标记为 -1
 
-        image_index = np_where(split_mask)[0] # 拿到筛选完毕的图片对应下标
+        image_index = np_where(split_mask)[0] # 拿到筛选完毕的图片对应下标，返回元组，元组里装了个列表
         # 根据设置再决定取多少张图片，把取出图片的下标拿到
         if num_im > -1:
             image_index = image_index[:num_im]
