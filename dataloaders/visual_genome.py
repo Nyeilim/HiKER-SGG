@@ -410,12 +410,12 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
         split = 2 if mode == 'test' else 0
         split_mask = data_split == split # 长度为 108073 的数组，每个位置为 True 或者 False
 
-        # Filter out images without bounding boxes
+        # Filter out images without bounding boxes; 过滤掉没有 bbox 的图片
         split_mask &= roi_h5['img_to_first_box'][:] >= 0 # 没有 bbox 的图片，这项会被标记为 -1
         if filter_empty_rels:
             split_mask &= roi_h5['img_to_first_rel'][:] >= 0 # 没有 rel 的图片，这项会被标记为 -1
 
-        image_index = np_where(split_mask)[0] # 拿到筛选完毕的图片对应下标，返回元组，元组里装了个列表
+        image_index = np_where(split_mask)[0] # 拿到筛选完毕的图片对应下标；np_where 的返回值类似 ([],)；因此我们要拿到元组内的数组
         # 根据设置再决定取多少张图片，把取出图片的下标拿到
         if num_im > -1:
             image_index = image_index[:num_im]
@@ -430,25 +430,31 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
         split_mask[image_index] = True
 
         # Get box information
-        all_labels = roi_h5['labels'][:, 0]
+        # 数据集中共有 1145398 个 bbox 和对应的物体标注(labels)，其中属于某张图片的 bbox 会被排列在连续的索引中
+        all_labels = roi_h5['labels'][:, 0] # 会拿到 shape(1145398,) 的一维数组，形如 [136,114,...]
+        # 会拿到 shape(1145398,4) 的二维数组，形如 [[511, 356, 1023, 713], [...], ...]，其中四个数字分别代表 [xc,yc,w,h]
         all_boxes = roi_h5['boxes_{}'.format(BOX_SCALE)][:]  # will index later
-        assert np_all(all_boxes[:, :2] >= 0)  # sanity check
-        assert np_all(all_boxes[:, 2:] > 0)  # no empty box
+        assert np_all(all_boxes[:, :2] >= 0)  # sanity check; 判断中心坐标是否 >= 0
+        assert np_all(all_boxes[:, 2:] > 0)  # no empty box; 判断高宽是否 > 0
 
-        # convert from xc, yc, w, h to x1, y1, x2, y2
+        # convert from xc, yc, w, h to x1, y1, x2, y2; 将中心、高宽数据转换为左上角、右下角坐标数据
         all_boxes[:, :2] = all_boxes[:, :2] - all_boxes[:, 2:] / 2
         all_boxes[:, 2:] = all_boxes[:, :2] + all_boxes[:, 2:]
 
+        # 前面说到属于某张图片的 bbox, rel 会被排列在连续的索引中，这里的 first, last 其实就是来框定这个索引区间的
+        # 比如 roi_h5['img_to_first_box'][1] = 15, roi_h5['img_to_first_box'][1] = 21
+        # 那我们就可以知道索引为 1 的图片，它的 bbox 是 all_boxes[15:21, :]；rel 同理
+        # 至于 split_mask 其实就是我们的 “取出图片”，它这里使用的是 numpy 的高级索引语法
         im_to_first_box = roi_h5['img_to_first_box'][split_mask]
         im_to_last_box = roi_h5['img_to_last_box'][split_mask]
         im_to_first_rel = roi_h5['img_to_first_rel'][split_mask]
         im_to_last_rel = roi_h5['img_to_last_rel'][split_mask]
 
-        # load relation labels
-        _relations = roi_h5['relationships'][:]
-        _relation_predicates = roi_h5['predicates'][:, 0]
+        # load relation labels; 数据集中一共标注了 622705 个关系
+        _relations = roi_h5['relationships'][:] # shape(622705, 2)，大胆猜测这个是三元组 <s,p,o> 中的 <s,o>
+        _relation_predicates = roi_h5['predicates'][:, 0] # shape(622705,)，大胆猜测这个是三元组 <s,p,o> 中的 <p>
 
-    # 上面这段都是对二进制标注文件的处理
+    # 上面这段都是对二进制标注文件的处理，下面这个是对数据一致性确认，确保数据能够匹配上
     assert (im_to_first_rel.shape[0] == im_to_last_rel.shape[0])
     assert (_relations.shape[0] == _relation_predicates.shape[0])  # sanity check
 
@@ -461,6 +467,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
     pred_num = 15
     pred_count=0
     # with open('./datasets/vg/VG-SGG-dicts-with-attri-info.json','r') as f:
+    # 这个加载进来的是 VG-SGG-dicts.json 文件
     with open(dict_file,'r') as f:
         vg_dict_info = json_load(f)
 
