@@ -11,6 +11,12 @@
       "linenumber": 485,
       "name": "BPL: 加载数据集平衡",
       "bookmarkType": "DIGIT_2"
+    },
+    {
+      "fileDescriptor": "$/dataloaders/visual_genome.py",
+      "linenumber": 470,
+      "name": "看到这",
+      "bookmarkType": "DIGIT_3"
     }
   ]
 }
