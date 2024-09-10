@@ -441,10 +441,11 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
         all_boxes[:, :2] = all_boxes[:, :2] - all_boxes[:, 2:] / 2
         all_boxes[:, 2:] = all_boxes[:, :2] + all_boxes[:, 2:]
 
-        # 前面说到属于某张图片的 bbox, rel 会被排列在连续的索引中，这里的 first, last 其实就是来框定这个索引区间的
+        # 前面说到属于某张图片的 bbox, rel 会被排列在连续的索引中，这里的 first, last 其实就是来框定这个索引区间（左右闭合）的
         # 比如 roi_h5['img_to_first_box'][1] = 15, roi_h5['img_to_first_box'][1] = 21
-        # 那我们就可以知道索引为 1 的图片，它的 bbox 是 all_boxes[15:21, :]；rel 同理
-        # 至于 split_mask 其实就是我们的 “取出图片”，它这里使用的是 numpy 的高级索引语法
+        # 那我们就可以知道索引为 1 的图片，它的 bbox 是 all_boxes[15:21+1, :]；rel 同理
+        # 至于 split_mask 其实就是我们的“取出图片”，它这里使用的是 numpy 的高级索引语法
+        # 把与“取出图片”相关的信息收集起来，然后放到单独的 List 中，顺序第0张【而不是索引为0】“取出图片”的对应信息会放到 List[0]
         im_to_first_box = roi_h5['img_to_first_box'][split_mask]
         im_to_last_box = roi_h5['img_to_last_box'][split_mask]
         im_to_first_rel = roi_h5['img_to_first_rel'][split_mask]
@@ -473,7 +474,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
 
     predicates_tree = vg_dict_info['predicate_count'] # 拿到 VG-SGG-dicts.json 里面的 predicate_count
     # predicates_tree = json.load(open('./datasets/vg/predicate_wikipedia_count.json', 'r'))
-    # 根据每个谓词的 count 数从大到小排序，最终出来个列表，每个元素都是个 map.item()，也就是元组，类似 ('on', 712409)
+    # 根据每个谓词的 count 数从大到小排序，最终出来个列表，每个元素都是个 map.entry，也就是元组，类似 ('on', 712409)
     predicates_sort = sorted(predicates_tree.items(), key=lambda x:x[1], reverse=True)
     # 这里大概的意思是挑选出 count 在前 15(pred_num) 的谓词，放到 pred_topk 里面作为列表
     for pred_i in predicates_sort:
@@ -489,12 +490,15 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
     else:
         print('Dataloader NOT using BPL')
         root_classes = None
+    # 所以这个 get_state 是用来干嘛的？重置位？
     if get_state:
         root_classes = None
     root_classes_count = {}
     leaf_classes_count = {}
     all_classes_count = {}
+    # image_index 的元素内容是“取出图片”的索引【但是用不上】，索引是“取出图片”的顺序号
     for i in range(len(image_index)):
+        # 取出单张图片的信息
         i_obj_start = im_to_first_box[i]
         i_obj_end = im_to_last_box[i]
         i_rel_start = im_to_first_rel[i]

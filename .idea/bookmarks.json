@@ -1,22 +1,22 @@
 {
   "HiKER-SGG": [
     {
+      "fileDescriptor": "$/dataloaders/visual_genome.py",
+      "linenumber": 471,
+      "name": "看到这",
+      "bookmarkType": "DIGIT_3"
+    },
+    {
+      "fileDescriptor": "$/dataloaders/visual_genome.py",
+      "linenumber": 486,
+      "name": "BPL: 数据集加载",
+      "bookmarkType": "DIGIT_2"
+    },
+    {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
       "linenumber": 410,
       "name": "SA: 概率转移代码",
       "bookmarkType": "DIGIT_1"
-    },
-    {
-      "fileDescriptor": "$/dataloaders/visual_genome.py",
-      "linenumber": 485,
-      "name": "BPL: 加载数据集平衡",
-      "bookmarkType": "DIGIT_2"
-    },
-    {
-      "fileDescriptor": "$/dataloaders/visual_genome.py",
-      "linenumber": 470,
-      "name": "看到这",
-      "bookmarkType": "DIGIT_3"
     }
   ]
 }
