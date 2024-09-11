@@ -504,6 +504,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
         i_rel_start = im_to_first_rel[i]
         i_rel_end = im_to_last_rel[i]
 
+        # 取出单张图片的 bbox 和 labels
         boxes_i = all_boxes[i_obj_start: i_obj_end + 1, :]
         gt_classes_i = all_labels[i_obj_start: i_obj_end + 1]
         # gt_attributes_i = all_attributes[i_obj_start: i_obj_end + 1, :]
