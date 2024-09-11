@@ -452,7 +452,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
         im_to_last_rel = roi_h5['img_to_last_rel'][split_mask]
 
         # load relation labels; 数据集中一共标注了 622705 个关系
-        _relations = roi_h5['relationships'][:] # shape(622705, 2)，大胆猜测这个是三元组 <s,p,o> 中的 <s,o>
+        _relations = roi_h5['relationships'][:] # shape(622705, 2)，大胆猜测这个是三元组 <s,p,o> 中的 <s,o>, 每个元素其实是 bbox 索引
         _relation_predicates = roi_h5['predicates'][:, 0] # shape(622705,)，大胆猜测这个是三元组 <s,p,o> 中的 <p>
 
     # 上面这段都是对二进制标注文件的处理，下面这个是对数据一致性确认，确保数据能够匹配上
@@ -511,14 +511,16 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
 
         if i_rel_start >= 0:
             predicates = _relation_predicates[i_rel_start: i_rel_end + 1]
+            # 这里可以理解成，本来 _relations 里面装的是每个 bbox 的绝对索引，转换为对于某个图片 i_obj_start 的相对索引
             obj_idx = _relations[i_rel_start: i_rel_end + 1] - i_obj_start  # range is [0, num_box)
             assert np_all(obj_idx >= 0)
             assert np_all(obj_idx < boxes_i.shape[0])
-            rels = np_column_stack((obj_idx, predicates))  # (num_rel, 3), representing sub, obj, and pred
+            rels = np_column_stack((obj_idx, predicates))  # shape(num_rel, 3), each row representing sub, obj, and pred
         else:
             assert not filter_empty_rels
             rels = np_zeros((0, 3), dtype=np_int32)
 
+        # 在训练时，是否过滤掉没有重叠 bbox 的图像，不重叠的 bbox 常常被认为是没有关系的
         if filter_non_overlap:
             assert mode == 'train'
             # construct BoxList object to apply boxlist_iou method
