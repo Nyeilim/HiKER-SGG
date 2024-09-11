@@ -80,7 +80,7 @@ class VG(Dataset):
         )
 
         self.filenames = load_image_filenames(image_file)
-        self.filenames = [self.filenames[i] for i in np_where(self.split_mask)[0]]
+        self.filenames = [self.filenames[i] for i in np_where(self.split_mask)[0]]  # 把“取出图片”的名字挑出来
 
         if use_proposals:
             print("Loading proposals", flush=True)
@@ -111,13 +111,14 @@ class VG(Dataset):
         #         Hue(),
         #     ]))
 
+        # 这个是图片放缩的处理流程，会在 __getitem__ 里面使用
         tform = [
-            SquarePad(),
-            Resize(IM_SCALE),
-            ToTensor(),
-            Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            SquarePad(),    # 进行图像边缘填充，使图像变为正方形
+            Resize(IM_SCALE),   # 默认为 592, 说明图片将被放缩到 592x592
+            ToTensor(),     # 将图像数据转换为 PyTorch 张量格式
+            Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),   # 将张量归一化
         ]
-        self.transform_pipeline = Compose(tform)
+        self.transform_pipeline = Compose(tform)    # 将流程封装成函数
 
     @property
     def coco(self):
@@ -166,11 +167,12 @@ class VG(Dataset):
         if self.caching is True and (self.use_cache is True or os_path_exists(cache_path)):
             return torch_load(cache_path)
 
-        # 读取照片
+        # 按照文件名读取照片，以 RGB 像素格式读取为二进制数据
         image_unpadded = Image_open(fname).convert('RGB')
         w, h = image_unpadded.size
-        max_side = max(w, h)
+        max_side = max(w, h)    # 取长边
 
+        # 似乎是对图片后处理，添加损坏(corruptions)的逻辑
         if self.test_n:
             ################### Apply corruptions to the image ####################
             # image_unpadded = gaussian_noise(image_unpadded, severity=5)
@@ -194,7 +196,7 @@ class VG(Dataset):
             # image_unpadded = rain(image_unpadded, severity=5)
             # image_unpadded = dust(image_unpadded, severity=5)
 
-            image_unpadded = Image.fromarray(image_unpadded.astype(np.uint8))
+            image_unpadded = Image.fromarray(image_unpadded.astype(np.uint8))   # 将二进制数组转换为 PIL 图像对象
 
             # For debugging
             # print(image_unpadded.size)
@@ -259,10 +261,10 @@ class VG(Dataset):
             ##########################################################################
 
         # Optionally flip the image if we're doing training
-        flipped = self.is_train and np_random_random() > 0.5
+        flipped = self.is_train and np_random_random() > 0.5    # 翻转标记，有 50% 的概率翻转图像
         gt_boxes = self.gt_boxes[index].copy()
 
-        box_scale_factor = BOX_SCALE / max_side
+        box_scale_factor = BOX_SCALE / max_side # 计算放缩因子，因为待会要对图像放缩，所以 bbox 也得放缩
         # Boxes are already at BOX_SCALE
         if self.is_train:
 
@@ -275,6 +277,7 @@ class VG(Dataset):
             # # crop the image for data augmentation
             # image_unpadded, gt_boxes = random_crop(image_unpadded, gt_boxes, BOX_SCALE, round_boxes=True)
 
+        # 翻转图像
         if flipped:
             scaled_w = int(box_scale_factor * float(w))
             # print("Scaled w is {}".format(scaled_w))
@@ -291,7 +294,8 @@ class VG(Dataset):
             im_size = (IM_SCALE, IM_SCALE, img_scale_factor)
 
         if PRINTING: print(f'visual_genome: after: im_size = {im_size}')
-        gt_rels = self.relationships[index].copy()
+        gt_rels = self.relationships[index].copy()  # 获取关系（三元组）
+        # 使用 Set 过滤掉重复关系
         if self.filter_duplicate_rels:
             # Filter out dupes!
             assert self.mode == 'train'
@@ -302,16 +306,17 @@ class VG(Dataset):
             gt_rels = [(k[0], k[1], np_random_choice(v)) for k,v in all_rel_sets.items()]
             gt_rels = np_array(gt_rels)
 
+        # 封装最后返回的数据结构
         entry = {
-            'img': self.transform_pipeline(image_unpadded),
-            'img_size': im_size,
-            'gt_boxes': gt_boxes,
-            'gt_classes': self.gt_classes[index].copy(),
-            'gt_relations': gt_rels,
+            'img': self.transform_pipeline(image_unpadded), # 放缩后的图像
+            'img_size': im_size,    # 放缩后尺寸及放缩比例
+            'gt_boxes': gt_boxes,   # bbox
+            'gt_classes': self.gt_classes[index].copy(),    # s,o 索引标注
+            'gt_relations': gt_rels,    # 关系（三元组）
             'scale': IM_SCALE / BOX_SCALE,  # Multiply the boxes by this.
-            'index': index,
-            'flipped': flipped,
-            'fn': fname,
+            'index': index, # 索引下标
+            'flipped': flipped, # 翻转标记
+            'fn': fname,    # 文件名
         }
 
         if self.rpn_rois is not None:
@@ -395,6 +400,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
     :param filter_empty_rels: (will be filtered otherwise.)
     :param filter_non_overlap: If training, filter images that dont overlap.
     :return: image_index: numpy array corresponding to the index of images we're using
+             split_mask: numpy boolean array of length 108073 tells you whether every image in dataset is selected.
              boxes: List where each element is a [num_gt, 4] array of ground
                     truth boxes (x1, y1, x2, y2)
              gt_classes: List where each element is a [num_gt] array of classes
