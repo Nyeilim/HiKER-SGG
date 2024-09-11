@@ -28,10 +28,10 @@ def arange(num):
     return torch_arange(num, dtype=torch_int64, device=CUDA_DEVICE)
 
 class GGNN(Module):
-    def __init__(self, emb_path, graph_path, time_step_num=3, hidden_dim=512, \
-                 output_dim=512, use_embedding=True, use_knowledge=True, \
-                 refine_obj_cls=False, num_ents=151, num_preds=51, \
-                 config=None, with_clean_classifier=None, with_transfer=None, \
+    def __init__(self, emb_path, graph_path, time_step_num=3, hidden_dim=512,
+                 output_dim=512, use_embedding=True, use_knowledge=True,
+                 refine_obj_cls=False, num_ents=151, num_preds=51,
+                 config=None, with_clean_classifier=None, with_transfer=None,
                  num_obj_cls=None, num_rel_cls=None, sa=None, lrga=None):
         super(GGNN, self).__init__()
         self.time_step_num = time_step_num
@@ -44,6 +44,13 @@ class GGNN(Module):
         self.in_channels = hidden_dim
         self.hidden_channels = hidden_dim
         self.out_channels = hidden_dim
+
+        self.sa = sa
+        self.use_ontological_adjustment = config.MODEL.USE_ONTOLOGICAL_ADJUSTMENT
+        self.normalize_eoa = config.MODEL.NORMALIZE_EOA
+        self.shift_eoa = config.MODEL.SHIFT_EOA
+        self.fold_eoa = config.MODEL.FOLD_EOA
+        self.merge_eoa_sa = config.MODEL.MERGE_EOA_SA
 
         if self.use_lrga is True:
             self.attention = ModuleList()
@@ -148,15 +155,6 @@ class GGNN(Module):
             self.fc_output_proj_ont_ent = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
 
         self.debug_info = {}
-
-        self.with_clean_classifier = with_clean_classifier
-        self.with_transfer = with_transfer
-        self.sa = sa
-        self.use_ontological_adjustment = config.MODEL.USE_ONTOLOGICAL_ADJUSTMENT
-        self.normalize_eoa = config.MODEL.NORMALIZE_EOA
-        self.shift_eoa = config.MODEL.SHIFT_EOA
-        self.fold_eoa = config.MODEL.FOLD_EOA
-        self.merge_eoa_sa = config.MODEL.MERGE_EOA_SA
 
         if self.use_ontological_adjustment is True:
             print('my_ggnn_10: using use_ontological_adjustment')

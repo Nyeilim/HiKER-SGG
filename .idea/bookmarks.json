@@ -2,7 +2,7 @@
   "HiKER-SGG": [
     {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 410,
+      "linenumber": 408,
       "name": "SA: 概率转移代码",
       "bookmarkType": "DIGIT_1"
     },
@@ -11,6 +11,12 @@
       "linenumber": 492,
       "name": "BPL: 加载数据集平衡",
       "bookmarkType": "DIGIT_2"
+    },
+    {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 254,
+      "name": "if with_clean_classifier and with_transfer:",
+      "bookmarkType": "LETTER_A"
     }
   ]
 }

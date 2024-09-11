@@ -68,7 +68,7 @@ train, val, test = VG.splits(num_val_im=conf.val_size, filter_duplicate_rels=Tru
                              filter_non_overlap=conf.mode == 'sgdet', with_clean_classifier=True,
                              get_state=False)
 
-# 这里的两个集合就是正常的 train & val，和上面的 train_full 不一样
+# 这里的两个集合经过 BPL 方法平衡后，会少很多头部谓词样本，在 SGG-G2S 的论文中拿来微调最后的层
 train_loader, val_loader = VGDataLoader.splits(train, val, mode='rel',
                                                batch_size=conf.batch_size,
                                                num_workers=conf.num_workers,
