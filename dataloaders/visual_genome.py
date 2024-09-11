@@ -452,8 +452,8 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
         im_to_last_rel = roi_h5['img_to_last_rel'][split_mask]
 
         # load relation labels; 数据集中一共标注了 622705 个关系
-        _relations = roi_h5['relationships'][:] # shape(622705, 2)，大胆猜测这个是三元组 <s,p,o> 中的 <s,o>, 每个元素其实是 bbox 索引
-        _relation_predicates = roi_h5['predicates'][:, 0] # shape(622705,)，大胆猜测这个是三元组 <s,p,o> 中的 <p>
+        _relations = roi_h5['relationships'][:] # shape(622705, 2)，大胆猜测这个是三元组 <s,p,o> 中的 <s,o>，每个元素是 bbox 索引
+        _relation_predicates = roi_h5['predicates'][:, 0] # shape(622705,)，大胆猜测这个是三元组 <s,p,o> 中的 <p>，每个元素是谓词索引
 
     # 上面这段都是对二进制标注文件的处理，下面这个是对数据一致性确认，确保数据能够匹配上
     assert (im_to_first_rel.shape[0] == im_to_last_rel.shape[0])
@@ -486,7 +486,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
     # 这里开始就是使用 BPL Method 的逻辑
     if with_clean_classifier:
         print('Dataloader using BPL')
-        root_classes = pred_topk # 类似 ['on', 'has', 'in' ... 'wears', 'standing on', 'in front of']
+        root_classes = pred_topk # 类似 ['on', 'has', 'in' ... 'wears', 'standing on', 'in front of']，就是论文说的“头部谓词”
     else:
         print('Dataloader NOT using BPL')
         root_classes = None
@@ -520,6 +520,10 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
             assert not filter_empty_rels
             rels = np_zeros((0, 3), dtype=np_int32)
 
+        # ---------------------------------------------------------------------------
+        # 外层循环在运行完上面的代码后，其实就已经完成 bbox，rel 的整理，下面分别是 重叠过滤 以及 BPL
+        # ---------------------------------------------------------------------------
+
         # 在训练时，是否过滤掉没有重叠 bbox 的图像，不重叠的 bbox 常常被认为是没有关系的
         if filter_non_overlap:
             assert mode == 'train'
@@ -536,7 +540,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
                 split_mask[image_index[i]] = 0
                 continue
 
-        # 下面这段就是 BPL 算法的内容，不知道它在干嘛
+        # 下面这段就是 BPL 算法的内容
         if root_classes is not None and mode == 'train':
             # print('old boxes: ', boxes_i)
             # print('old gt_classes_i: ', gt_classes_i)
@@ -546,13 +550,16 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
             box_num = 0
             retain_box = []
             # print('rels: ',rels)
+            # 遍历此图中的每个关系，并根据其属于头部谓词还是尾部谓词，执行不同逻辑，判断将其是否加入 rel_temp
             for rel_i in rels:
-                rel_i_pred = ind_to_predicates[rel_i[2]]
+                rel_i_pred = ind_to_predicates[rel_i[2]] # 将谓词索引翻译成具体的谓词，比如 31 -> 'on'
+                # 这个 all_classes_count 是循环外定义的 Map<string,int> 用来存放谓词的计数
                 if rel_i_pred not in all_classes_count:
                     all_classes_count[rel_i_pred] = 0
                 all_classes_count[rel_i_pred] = all_classes_count[rel_i_pred] + 1
+                # rel_i_pred 作为尾部谓词或者“无关系”的逻辑，谓词索引 0 表示 'no_relationship'
                 if rel_i_pred not in root_classes or rel_i[2] == 0:
-                    rel_i_leaf = rel_i
+                    rel_i_leaf = rel_i  # 添加为尾部谓词
 
                     # if rel_i[0] not in boxmap_old2new:
                     # boxmap_old2new[rel_i[0]] = box_num
@@ -566,12 +573,14 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
                     # rel_i_new[1] = boxmap_old2new[rel_i[1]]
                     if rel_i_pred not in leaf_classes_count:
                         leaf_classes_count[rel_i_pred] = 0
-                    leaf_classes_count[rel_i_pred] = leaf_classes_count[rel_i_pred] + 1
-                    rel_temp.append(rel_i_leaf)
+                    leaf_classes_count[rel_i_pred] = leaf_classes_count[rel_i_pred] + 1 # 统计尾部谓词数
+                    rel_temp.append(rel_i_leaf) # 添加该三元组（或者说关系）到临时列表，作为训练集的候选数据
+                # rel_i_pred 作为头部谓词的逻辑
                 if rel_i_pred in root_classes:
                     rel_i_root = rel_i
                     if rel_i_pred not in root_classes_count:
                         root_classes_count[rel_i_pred] = 0
+                    # 这里人为限定：包含某个头部谓词的三元组，其样本数量不能超过 1000
                     if root_classes_count[rel_i_pred] < 1000: # Adjust the intensity of BPL here
                         rel_temp.append(rel_i_root)
                         root_classes_count[rel_i_pred] = root_classes_count[rel_i_pred] + 1
@@ -579,17 +588,20 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
                 split_mask[image_index[i]] = 0
                 continue
             else:
-                rels = np_array(rel_temp, dtype=np_int32)
+                rels = np_array(rel_temp, dtype=np_int32)   # 将 rel_temp 转正为 rels
 
             # retain_box = np.array(retain_box, dtype=np.int64)
             # boxes_i = boxes_i[retain_box]
             # gt_classes_i = gt_classes_i[retain_box]
             # gt_attributes_i = gt_attributes_i[retain_box]
 
+        # 把此图中拿到的 bbox 和 rel 添加到总列表，开始处理下张图片
         boxes.append(boxes_i)
         gt_classes.append(gt_classes_i)
         # gt_attributes.append(gt_attributes_i)
         relationships.append(rels)
+
+    # 打印信息
     if PRINTING: print('mode: ',mode)
     if PRINTING: print('root_classes_count: ', root_classes_count)
     count_list = [0,]
