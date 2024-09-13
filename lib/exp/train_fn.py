@@ -1,6 +1,8 @@
 import pandas as pd
 from apex import amp
 from time import time as time_time
+
+from apex.contrib.openfold_triton.mha import disable
 from torch.cuda.amp import autocast
 from tqdm import tqdm
 
@@ -12,7 +14,7 @@ def train_epoch(epoch_num, optimizer, verbose=False):
     detector.train()
     tr = []
     start = time_time()
-    prog_bar = tqdm(enumerate(train_loader), total=int(len(train) / train_loader.batch_size))
+    prog_bar = tqdm(enumerate(train_loader), total=int(len(train) / train_loader.batch_size), disable=not verbose)
     for b, batch in prog_bar:
         # print(train_batch(batch, verbose=b % (conf.print_interval*10) == 0))
         result, loss_dict = train_batch(batch, optimizer, verbose=b % (conf.print_interval * 10) == 0)
@@ -28,7 +30,7 @@ def train_epoch(epoch_num, optimizer, verbose=False):
             print(np.argmax(out[ind, 1:], 1) + 1)
         '''
 
-        if b % conf.print_interval == 0 and b >= conf.print_interval and verbose:
+        if b % conf.print_interval == 0 and b >= conf.print_interval:
             #             mn = pd.DataFrame([pd.Series(dicty) for dicty in tr[-conf.print_interval:]]).mean(1)
             mn = pd.DataFrame(tr[-conf.print_interval:]).mean(axis=0)
             time_per_batch = (time_time() - start) / conf.print_interval
