@@ -1,6 +1,30 @@
 {
   "HiKER-SGG": [
     {
+      "fileDescriptor": "$/lib/exp/train_fn.py",
+      "linenumber": 14,
+      "name": "打印进度条",
+      "bookmarkType": "LETTER_Z"
+    },
+    {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 38,
+      "name": "BPL\u0026SA: 外部变量赋值给成员变量",
+      "bookmarkType": "LETTER_A"
+    },
+    {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 183,
+      "name": "BPL: Init 阶段创建独属于 BPL 方法的 MLP 层以及加载混淆矩阵",
+      "bookmarkType": "LETTER_C"
+    },
+    {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 381,
+      "name": "BPL: 是否使用 BPL 方法的分歧点",
+      "bookmarkType": "LETTER_D"
+    },
+    {
       "fileDescriptor": "$/dataloaders/visual_genome.py",
       "linenumber": 492,
       "name": "BPL: 加载数据集平衡",
@@ -8,27 +32,15 @@
     },
     {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 181,
-      "name": "BPL: GGNN Init 中的 IF 语句",
+      "linenumber": 254,
+      "name": "BPL\u0026SA: 成员变量赋值给局部变量",
       "bookmarkType": "LETTER_B"
     },
     {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 38,
-      "name": "BPL\u0026SA: 在 GGNN 内核中被使用的地方",
-      "bookmarkType": "LETTER_A"
-    },
-    {
-      "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 408,
+      "linenumber": 411,
       "name": "SA: 概率转移代码",
       "bookmarkType": "DIGIT_1"
-    },
-    {
-      "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 251,
-      "name": "BPL\u0026\u0026SA: 被赋值给局部变量",
-      "bookmarkType": "LETTER_C"
     }
   ]
 }

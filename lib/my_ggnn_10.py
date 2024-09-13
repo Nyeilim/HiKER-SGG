@@ -178,6 +178,8 @@ class GGNN(Module):
         else:
             print(f'my_ggnn_10: not using use_ontological_adjustment. self.use_ontological_adjustment={self.use_ontological_adjustment}')
 
+        # Init 阶段创建独属于 BPL 方法的 MLP 层以及加载混淆矩阵
+        # 如果使用 BPL 方法，就会使用在这里初始化的 fc_output_proj_img_pred_clean 作为分类头，而不是 fc_output_proj_img_pred
         if self.with_clean_classifier:
             self.fc_output_proj_img_pred_clean = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
             self.fc_output_proj_ont_pred_clean = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
@@ -186,6 +188,7 @@ class GGNN(Module):
                 self.fc_output_proj_img_ent_clean = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
                 self.fc_output_proj_ont_ent_clean = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
 
+            # 下面这段代码其实没啥用，你这个 self.pred_adj_nor 最后都没赋值给有效的局部变量，实际上混淆矩阵的预加载是在 global_var.py:116
             if self.with_transfer is True:
                 print("!!!!!!!!!With Confusion Matrix Channel!!!!!")
                 # 加载初始的谓词混淆矩阵
@@ -195,13 +198,13 @@ class GGNN(Module):
                 pred_adj_np[:, 0] = 0.0
                 pred_adj_np[0, 0] = 1.0
                 # adj_i_j means the baseline outputs category j, but the ground truth is i.
-                pred_adj_np = pred_adj_np / (pred_adj_np.sum(-1)[:, None] + 1e-8)
+                pred_adj_np = pred_adj_np / (pred_adj_np.sum(-1)[:, None] + 1e-8)   # 行归一化，避免除零错误加了 1e-8
                 if self.sa is True:
-                    pred_adj_np = adj_normalize(pred_adj_np)
+                    pred_adj_np = adj_normalize(pred_adj_np)    # 加上单位矩阵，再进行行归一化操作
                     print(f'SA: Used adj_normalize')
                 else:
                     print(f'No SA: Not using adj_normalize.self.sa={self.sa}')
-                self.pred_adj_nor = torch_tensor(pred_adj_np, dtype=torch_float32, device=CUDA_DEVICE)
+                self.pred_adj_nor = torch_tensor(pred_adj_np, dtype=torch_float32, device=CUDA_DEVICE)  # 转换为张量
 
 
     def forward(self, rel_inds, obj_probs, obj_fmaps, vr):
@@ -252,6 +255,7 @@ class GGNN(Module):
         with_clean_classifier = self.with_clean_classifier
         with_transfer = self.with_transfer
 
+        # 这行代码没用啊？
         if with_clean_classifier and with_transfer:
             pred_adj_nor = self.pred_adj_nor
 
@@ -374,8 +378,7 @@ class GGNN(Module):
             # conf_superof = np.load('/home/ce/data/vg/conf_mat_superof.npy')
             # conf_superof = torch_tensor(conf_superof, dtype=torch_float32, device=CUDA_DEVICE, requires_grad=False)
 
-
-
+            # 是否使用 BPL 方法在这里出现分歧
             if not with_clean_classifier:
                 pred_cls_logits = torch_mm(self.fc_output_proj_img_pred(nodes_img_pred), self.fc_output_proj_ont_pred(nodes_ont_pred).t())
 
