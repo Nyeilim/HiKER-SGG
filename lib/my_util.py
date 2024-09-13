@@ -57,6 +57,6 @@ def normalize(mx):
     r_mat_inv = np_diag(r_inv)
     return r_mat_inv.dot(mx)
 
-
+# 这个就是论文里说的：将混淆矩阵+单位矩阵，然后在进行行归一化
 def adj_normalize(adj):
-    return normalize(adj + np_eye(adj.shape[0]))
+    return normalize(adj + np_eye(adj.shape[0])) # np_eye(adj.shape[0]) 是单位矩阵

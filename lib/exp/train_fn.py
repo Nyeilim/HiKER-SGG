@@ -8,7 +8,7 @@ from lib.exp.global_var import conf, detector, train, train_loader, write
 from lib.pytorch_misc import clip_grad_norm
 
 
-def train_epoch(epoch_num, optimizer):
+def train_epoch(epoch_num, optimizer, verbose=False):
     detector.train()
     tr = []
     start = time_time()
@@ -28,7 +28,7 @@ def train_epoch(epoch_num, optimizer):
             print(np.argmax(out[ind, 1:], 1) + 1)
         '''
 
-        if b % conf.print_interval == 0 and b >= conf.print_interval:
+        if b % conf.print_interval == 0 and b >= conf.print_interval and verbose:
             #             mn = pd.DataFrame([pd.Series(dicty) for dicty in tr[-conf.print_interval:]]).mean(1)
             mn = pd.DataFrame(tr[-conf.print_interval:]).mean(axis=0)
             time_per_batch = (time_time() - start) / conf.print_interval
