@@ -14,7 +14,7 @@ def train_epoch(epoch_num, optimizer, verbose=False):
     detector.train()
     tr = []
     start = time_time()
-    prog_bar = tqdm(enumerate(train_loader), total=int(len(train) / train_loader.batch_size), disable=not verbose)
+    prog_bar = tqdm(enumerate(train_loader), total=int(len(train) / train_loader.batch_size))
     for b, batch in prog_bar:
         # print(train_batch(batch, verbose=b % (conf.print_interval*10) == 0))
         result, loss_dict = train_batch(batch, optimizer, verbose=b % (conf.print_interval * 10) == 0)
