@@ -13,6 +13,7 @@ def train_epoch(epoch_num, optimizer, verbose=False):
     detector.train()
     tr = []
     start = time_time()
+    # disable = not verbose，关闭进度条，不然日志文件会很长
     prog_bar = tqdm(enumerate(train_loader), total=int(len(train) / train_loader.batch_size), disable = not verbose)
     for b, batch in prog_bar:
         # print(train_batch(batch, verbose=b % (conf.print_interval*10) == 0))
