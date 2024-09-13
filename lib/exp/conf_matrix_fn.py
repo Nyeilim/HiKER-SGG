@@ -8,7 +8,7 @@ from lib.evaluation.sg_eval import BasicSceneGraphEvaluator, eval_entry
 from lib.exp.global_var import conf, detector, ind_to_predicates, train_full_loader, train_full
 
 
-def train_evaluate():
+def train_evaluate(verbose = False):
     detector.eval()
     evaluator_list = []  # for calculating recall of each relationship except no relationship
     evaluator_multiple_preds_list = []
@@ -20,7 +20,7 @@ def train_evaluate():
     evaluator = BasicSceneGraphEvaluator.all_modes()  # for calculating recall
     evaluator_multiple_preds = BasicSceneGraphEvaluator.all_modes(multiple_preds=True)
 
-    prog_bar = tqdm(enumerate(train_full_loader), total=int(len(train_full) / train_full_loader.batch_size))
+    prog_bar = tqdm(enumerate(train_full_loader), total=int(len(train_full) / train_full_loader.batch_size), disable = not verbose)
 
     with torch_no_grad():
         for train_full_b, batch in prog_bar:

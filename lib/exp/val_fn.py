@@ -8,7 +8,7 @@ from lib.evaluation.sg_eval import BasicSceneGraphEvaluator, calculate_mR_from_e
 from lib.exp.global_var import conf, detector, ind_to_predicates, val_loader, val
 
 
-def val_epoch():
+def val_epoch(verbose=False):
     detector.eval()
     evaluator_list = []  # for calculating recall of each relationship except no relationship
     evaluator_multiple_preds_list = []
@@ -20,7 +20,7 @@ def val_epoch():
     evaluator = BasicSceneGraphEvaluator.all_modes()  # for calculating recall
     evaluator_multiple_preds = BasicSceneGraphEvaluator.all_modes(multiple_preds=True)
 
-    prog_bar = tqdm(enumerate(val_loader), total=int(len(val) / val_loader.batch_size))
+    prog_bar = tqdm(enumerate(val_loader), total=int(len(val) / val_loader.batch_size), disable=not verbose)
 
     with torch_no_grad():
         for val_b, batch in prog_bar:
