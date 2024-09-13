@@ -7,6 +7,12 @@
       "bookmarkType": "LETTER_Z"
     },
     {
+      "fileDescriptor": "$/dataloaders/visual_genome.py",
+      "linenumber": 477,
+      "name": "看到这",
+      "bookmarkType": "DIGIT_3"
+    },
+    {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
       "linenumber": 38,
       "name": "BPL\u0026SA: 外部变量赋值给成员变量",
