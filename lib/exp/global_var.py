@@ -27,7 +27,7 @@ conf = ModelConfig(f'''
 -ckpt ../data/checkpoints/vgdet/vgrel-11.tar
 -val_size 5000
 -adam
--b 3
+-b 8
 -ngpu 1
 -lr 1e-4
 ''')
@@ -38,7 +38,7 @@ conf.MODEL.CONF_MAT_FREQ_TRAIN = '/output/data/misc/conf_mat_freq_train.npy'  # 
 conf.MODEL.LRGA.USE_LRGA = False
 conf.MODEL.USE_ONTOLOGICAL_ADJUSTMENT = False
 conf.MODEL.NORMALIZE_EOA = False
-conf.num_workers = 9
+conf.num_workers = 24
 # conf.MODEL.LRGA.K = 50
 # conf.MODEL.LRGA.DROPOUT = 0.5
 # conf.MODEL.GN.NUM_GROUPS = 1024//8
