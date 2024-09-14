@@ -17,7 +17,7 @@ codebase = '/output/HiKER-SGG/'  # 项目根目录
 sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
 exp_name = 'hikersgg_predcls_train'
 write = tqdm.write  # 函数引用赋值，用来打印日志
-use_bpl = False # 启用还是关闭 BPL 方法
+use_bpl = True # 启用还是关闭 BPL 方法
 
 # 创建配置类，加载配置
 # vgrel-11 是 GB-Net 提供的预训练模型，HiKER-SGG 的核心部分(GNN)和 GB-Net 非常接近

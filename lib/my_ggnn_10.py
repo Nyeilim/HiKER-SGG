@@ -612,4 +612,5 @@ class GGNN(Module):
                     ent_cls_logits[:, 0] = 1
                     ent_cls_logits = ent_cls_logits * scent_score.data
 
+        # TODO: need fix bug that `scpred_cls_score` isn't assigned when close BPL method.
         return pred_cls_logits, ent_cls_logits, scpred_cls_score, scent_cls_score
