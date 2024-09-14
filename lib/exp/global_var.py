@@ -17,6 +17,7 @@ codebase = '/output/HiKER-SGG/'  # 项目根目录
 sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
 exp_name = 'hikersgg_predcls_train'
 write = tqdm.write  # 函数引用赋值，用来打印日志
+use_bpl = False # 启用还是关闭 BPL 方法
 
 # 创建配置类，加载配置
 # vgrel-11 是 GB-Net 提供的预训练模型，HiKER-SGG 的核心部分(GNN)和 GB-Net 非常接近
@@ -65,7 +66,7 @@ _, train_full_loader = VGDataLoader.splits(train_full, train_full, mode='rel',
 # with_clean_classifier==True 表示使用 BPL Method，该方法出自论文 SGG-G2S
 train, val, test = VG.splits(num_val_im=conf.val_size, filter_duplicate_rels=True,
                              use_proposals=conf.use_proposals,
-                             filter_non_overlap=conf.mode == 'sgdet', with_clean_classifier=True,
+                             filter_non_overlap=conf.mode == 'sgdet', with_clean_classifier=use_bpl,
                              get_state=False)
 
 # 这里的两个集合经过 BPL 方法平衡后，会少很多头部谓词样本，在 SGG-G2S 的论文中拿来微调最后的层
@@ -92,7 +93,7 @@ detector = KERN(classes=train.ind_to_classes, rel_classes=train.ind_to_predicate
                 # 存储着训练集中每个谓词的词频
                 rel_counts_path=os.path.join(codebase, 'graphs/001/pred_counts.pkl'),
                 use_knowledge=True, use_embedding=True, refine_obj_cls=False,
-                class_volume=1.0, with_clean_classifier=True, with_transfer=True, sa=True, config=conf,
+                class_volume=1.0, with_clean_classifier=use_bpl, with_transfer=True, sa=True, config=conf,
                 )
 
 # Freeze the detector 冻结参数

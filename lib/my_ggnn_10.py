@@ -514,6 +514,9 @@ class GGNN(Module):
                     # Concatenate scpred_cls_score, superon_cls_score, superof_cls_score, superto_cls_score
                     scpred_cls_score = torch_cat((scpred_cls_score, superon_cls_score, superof_cls_score, superto_cls_score), dim=1)
 
+            # -----------------------
+            # 上面是使用 BPL 方法的逻辑
+
             edges_img2ont_pred = F_softmax(pred_cls_logits, dim=1)
             edges_ont2img_pred = edges_img2ont_pred.t()
             if refine_obj_cls:
