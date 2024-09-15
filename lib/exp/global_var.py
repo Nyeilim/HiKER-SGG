@@ -47,13 +47,13 @@ conf.MODEL.NORMALIZE_EOA = False
 # ------------------------------------------------------------------------------------
 
 # VG 类继承自 Dataset 类，把数据集拆分为训练集、验证集、测试集，参数作为关键字参数传入
-# take train_full for evaluating the confusion matrix;
+# take train_full for evaluating the confusion matrix; return size: 57723, 5000, 26446
 train_full, _val, _test = VG.splits(num_val_im=conf.val_size, filter_duplicate_rels=True,
                                     use_proposals=conf.use_proposals,
                                     filter_non_overlap=conf.mode == 'sgdet', with_clean_classifier=False,
                                     get_state=False)
 
-# VGDataLoader 类继承自 Dataloader 类，作为迭代器拿取 batch
+# VGDataLoader 类继承自 Dataloader 类，作为迭代器拿取 batch; return size: 7215, 57723
 _, train_full_loader = VGDataLoader.splits(train_full, train_full, mode='rel',
                                            batch_size=conf.batch_size,
                                            num_workers=conf.num_workers,
@@ -63,13 +63,13 @@ _, train_full_loader = VGDataLoader.splits(train_full, train_full, mode='rel',
 # ------------------------------------------------------------------------------------
 
 # 这里的 split 的目的好像是用来训练
-# with_clean_classifier==True 表示使用 BPL Method，该方法出自论文 SGG-G2S
+# with_clean_classifier==True 表示使用 BPL Method，该方法出自论文 SGG-G2S; return size: 16832, 5000, 26446
 train, val, test = VG.splits(num_val_im=conf.val_size, filter_duplicate_rels=True,
                              use_proposals=conf.use_proposals,
                              filter_non_overlap=conf.mode == 'sgdet', with_clean_classifier=use_bpl,
                              get_state=False)
 
-# 这里的两个集合经过 BPL 方法平衡后，会少很多头部谓词样本，在 SGG-G2S 的论文中拿来微调最后的层
+# 这里的两个集合经过 BPL 方法平衡后，会少很多头部谓词样本，在 SGG-G2S 的论文中拿来微调最后的层; return size: 2104, 5000
 train_loader, val_loader = VGDataLoader.splits(train, val, mode='rel',
                                                batch_size=conf.batch_size,
                                                num_workers=conf.num_workers,
