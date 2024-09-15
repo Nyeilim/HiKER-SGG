@@ -17,7 +17,8 @@ codebase = '/output/HiKER-SGG/'  # 项目根目录
 sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
 exp_name = 'hikersgg_predcls_train'
 write = tqdm.write  # 函数引用赋值，用来打印日志
-use_bpl = True # 启用还是关闭 BPL 方法
+use_bpl = False # 启用还是关闭 BPL 方法
+use_sa = False # 启用还是关闭 SA 方法
 
 # 创建配置类，加载配置
 # vgrel-11 是 GB-Net 提供的预训练模型，HiKER-SGG 的核心部分(GNN)和 GB-Net 非常接近
@@ -93,7 +94,7 @@ detector = KERN(classes=train.ind_to_classes, rel_classes=train.ind_to_predicate
                 # 存储着训练集中每个谓词的词频
                 rel_counts_path=os.path.join(codebase, 'graphs/001/pred_counts.pkl'),
                 use_knowledge=True, use_embedding=True, refine_obj_cls=False,
-                class_volume=1.0, with_clean_classifier=use_bpl, with_transfer=True, sa=True, config=conf,
+                class_volume=1.0, with_clean_classifier=use_bpl, with_transfer=use_sa, sa=use_sa, config=conf,
                 )
 
 # Freeze the detector 冻结参数

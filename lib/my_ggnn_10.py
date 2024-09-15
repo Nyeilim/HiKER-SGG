@@ -2,23 +2,24 @@
 # From my_ggnn_09: Dynamically connecting entities to ontology too
 # Also a minor change: img2ont edges are now normalized over ont rather than img
 ##################################################################
+from pickle import load as pickle_load
+
+import numpy as np
+import torch
 from torch import tensor as torch_tensor, float32 as torch_float32, \
     int64 as torch_int64, arange as torch_arange, mm as torch_mm, \
-    zeros as torch_zeros, bool as torch_bool, float16 as torch_float16,\
-    sigmoid as torch_sigmoid, tanh as torch_tanh, cat as torch_cat, \
-    sum as torch_sum, abs as torch_abs, no_grad as torch_no_grad, \
-    cat as torch_cat, mul as torch_mul, zeros_like as torch_zeros_like, ones_like as torch_ones_like
+    zeros as torch_zeros, bool as torch_bool, float16 as torch_float16, \
+    sigmoid as torch_sigmoid, tanh as torch_tanh, cat as torch_cat, zeros_like as torch_zeros_like, \
+    ones_like as torch_ones_like
 from torch.cuda import current_device
 from torch.nn import Module, Linear, ModuleList, Sequential, ReLU, LayerNorm
 from torch.nn.functional import softmax as F_softmax, relu as F_relu, \
-                                normalize as F_normalize
-import numpy as np
-from pickle import load as pickle_load
-from lib.my_util import MLP, adj_normalize
+    normalize as F_normalize
+
 from lib.lrga import LowRankAttention
+from lib.my_util import MLP, adj_normalize
 
-
-CUDA_DEVICE = current_device()
+CUDA_DEVICE = torch.device(f'cuda:{current_device()}')
 
 
 def wrap(nparr):
@@ -379,140 +380,143 @@ class GGNN(Module):
             # conf_superof = torch_tensor(conf_superof, dtype=torch_float32, device=CUDA_DEVICE, requires_grad=False)
 
             # 是否使用 BPL 方法在这里出现分歧
-            if not with_clean_classifier:
-                pred_cls_logits = torch_mm(self.fc_output_proj_img_pred(nodes_img_pred), self.fc_output_proj_ont_pred(nodes_ont_pred).t())
-
             if with_clean_classifier:
                 pred_cls_logits = torch_mm(self.fc_output_proj_img_pred_clean(nodes_img_pred), self.fc_output_proj_ont_pred_clean(nodes_ont_pred).t())
-                if t == self.time_step_num - 1:
+            else:
+                pred_cls_logits = torch_mm(self.fc_output_proj_img_pred(nodes_img_pred), self.fc_output_proj_ont_pred(nodes_ont_pred).t())
+
+            # 下面这段代码提出 if with_clean_classifier 外试试
+            # 在最后的时间步计算完毕后，开始计算分数和 SA 处理？
+            if t == self.time_step_num - 1:
+                index = torch_zeros(60 + 8, requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+                index[0] = True
+                index[51] = True
+                index[52] = True
+                index[53] = True
+                index[54] = True
+                index[55] = True
+                index[56] = True
+                index[57] = True
+                index[58] = True
+                index[59] = True
+                # scpred_cls_score = F_softmax((scpred_adj_nor @ pred_cls_logits[:, index].T).T, dim=1)
+                # superon_cls_score = F_softmax((conf_superon @ pred_cls_logits[:, 60:63].T).T, dim=1)
+                # superof_cls_score = F_softmax((conf_superof @ pred_cls_logits[:, 63:66].T).T, dim=1)
+                # superto_cls_score = F_softmax((conf_superto @ pred_cls_logits[:, 66:68].T).T, dim=1)
+                scpred_cls_score = F_softmax(pred_cls_logits[:, index], dim=1)
+                superon_cls_score = F_softmax(pred_cls_logits[:, 60:63], dim=1)
+                superof_cls_score = F_softmax(pred_cls_logits[:, 63:66], dim=1)
+                superto_cls_score = F_softmax(pred_cls_logits[:, 66:68], dim=1)
+                pred_cls_logits = pred_cls_logits[:, :51]
+                # 这行代码非常重要，好像就是概率转移 adaptive refinement，使用概率转移矩阵的置换矩阵来进行查表；
+                # 然后概率转移之后 pred_cls_logits 每行的概率之和不等于 1，所以需要归一化，应该就是下面的操作
+                if self.with_transfer:
                     pred_adj_np = np.load('/output/data/misc/conf_mat_updated.npy')  # 加载概率转移矩阵
                     pred_adj_nor = torch_tensor(pred_adj_np, dtype=torch_float32, device=CUDA_DEVICE)
-                    index = torch_zeros(60 + 8, requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
-                    index[0] = True
-                    index[51] = True
-                    index[52] = True
-                    index[53] = True
-                    index[54] = True
-                    index[55] = True
-                    index[56] = True
-                    index[57] = True
-                    index[58] = True
-                    index[59] = True
-                    # scpred_cls_score = F_softmax((scpred_adj_nor @ pred_cls_logits[:, index].T).T, dim=1)
-                    # superon_cls_score = F_softmax((conf_superon @ pred_cls_logits[:, 60:63].T).T, dim=1)
-                    # superof_cls_score = F_softmax((conf_superof @ pred_cls_logits[:, 63:66].T).T, dim=1)
-                    # superto_cls_score = F_softmax((conf_superto @ pred_cls_logits[:, 66:68].T).T, dim=1)
-                    scpred_cls_score = F_softmax(pred_cls_logits[:, index], dim=1)
-                    superon_cls_score = F_softmax(pred_cls_logits[:, 60:63], dim=1)
-                    superof_cls_score = F_softmax(pred_cls_logits[:, 63:66], dim=1)
-                    superto_cls_score = F_softmax(pred_cls_logits[:, 66:68], dim=1)
-                    pred_cls_logits = pred_cls_logits[:, :51]
-                    # 这行代码非常重要，好像就是概率转移 adaptive refinement，使用概率转移矩阵的置换矩阵来进行查表；
-                    # 然后概率转移之后 pred_cls_logits 每行的概率之和不等于 1，所以需要归一化，应该就是下面的操作
                     pred_cls_logits = (pred_adj_nor @ pred_cls_logits.T).T
 
-                    scpred_score = torch_zeros_like(pred_cls_logits, requires_grad=True, device=CUDA_DEVICE, dtype=torch_float32)
-                    scpred2_score = torch_ones_like(pred_cls_logits, requires_grad=True, device=CUDA_DEVICE, dtype=torch_float32)
-                    for i in superon1:
-                        scpred2_score.data[:, i] = superon_cls_score[:, 0]
-                    for i in superon2:
-                        scpred2_score.data[:, i] = superon_cls_score[:, 1]
-                    for i in superon3:
-                        scpred2_score.data[:, i] = superon_cls_score[:, 2]
-                    for i in superof1:
-                        scpred2_score.data[:, i] = superof_cls_score[:, 0]
-                    for i in superof2:
-                        scpred2_score.data[:, i] = superof_cls_score[:, 1]
-                    for i in superof3:
-                        scpred2_score.data[:, i] = superof_cls_score[:, 2]
-                    for i in superto1:
-                        scpred2_score.data[:, i] = superto_cls_score[:, 0]
-                    for i in superto2:
-                        scpred2_score.data[:, i] = superto_cls_score[:, 1]
+                scpred_score = torch_zeros_like(pred_cls_logits, requires_grad=True, device=CUDA_DEVICE, dtype=torch_float32)
+                scpred2_score = torch_ones_like(pred_cls_logits, requires_grad=True, device=CUDA_DEVICE, dtype=torch_float32)
+                for i in superon1:
+                    scpred2_score.data[:, i] = superon_cls_score[:, 0]
+                for i in superon2:
+                    scpred2_score.data[:, i] = superon_cls_score[:, 1]
+                for i in superon3:
+                    scpred2_score.data[:, i] = superon_cls_score[:, 2]
+                for i in superof1:
+                    scpred2_score.data[:, i] = superof_cls_score[:, 0]
+                for i in superof2:
+                    scpred2_score.data[:, i] = superof_cls_score[:, 1]
+                for i in superof3:
+                    scpred2_score.data[:, i] = superof_cls_score[:, 2]
+                for i in superto1:
+                    scpred2_score.data[:, i] = superto_cls_score[:, 0]
+                for i in superto2:
+                    scpred2_score.data[:, i] = superto_cls_score[:, 1]
 
-                    doing_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
-                    wear_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
-                    superon_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
-                    superat_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
-                    position_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
-                    superin_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
-                    superof_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
-                    superto_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
-                    superother_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
-                    superon1_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
-                    superon2_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
-                    superon3_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
-                    superof1_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
-                    superof2_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
-                    superof3_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
-                    superto1_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
-                    superto2_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
-                    for j in doing:
-                        scpred_score.data[:, j] = scpred_cls_score[:, 1]
-                        doing_index[j] = True
-                    for j in wear:
-                        scpred_score.data[:, j] = scpred_cls_score[:, 2]
-                        wear_index[j] = True
-                    for j in superon:
-                        scpred_score.data[:, j] = scpred_cls_score[:, 3]
-                        superon_index[j] = True
-                    for j in superat:
-                        scpred_score.data[:, j] = scpred_cls_score[:, 4]
-                        superat_index[j] = True
-                    for j in position:
-                        scpred_score.data[:, j] = scpred_cls_score[:, 5]
-                        position_index[j] = True
-                    for j in superin:
-                        scpred_score.data[:, j] = scpred_cls_score[:, 6]
-                        superin_index[j] = True
-                    for j in superof:
-                        scpred_score.data[:, j] = scpred_cls_score[:, 7]
-                        superof_index[j] = True
-                    for j in superto:
-                        scpred_score.data[:, j] = scpred_cls_score[:, 8]
-                        superto_index[j] = True
-                    for j in superother:
-                        scpred_score.data[:, j] = scpred_cls_score[:, 9]
-                        superother_index[j] = True
-                    for j in superon1:
-                        superon1_index[j] = True
-                    for j in superon2:
-                        superon2_index[j] = True
-                    for j in superon3:
-                        superon3_index[j] = True
-                    for j in superof1:
-                        superof1_index[j] = True
-                    for j in superof2:
-                        superof2_index[j] = True
-                    for j in superof3:
-                        superof3_index[j] = True
-                    for j in superto1:
-                        superto1_index[j] = True
-                    for j in superto2:
-                        superto2_index[j] = True
-                    scpred_score.data[:, 0] = scpred_cls_score[:, 0]
+                doing_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+                wear_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+                superon_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+                superat_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+                position_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+                superin_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+                superof_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+                superto_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+                superother_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+                superon1_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+                superon2_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+                superon3_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+                superof1_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+                superof2_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+                superof3_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+                superto1_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+                superto2_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+                for j in doing:
+                    scpred_score.data[:, j] = scpred_cls_score[:, 1]
+                    doing_index[j] = True
+                for j in wear:
+                    scpred_score.data[:, j] = scpred_cls_score[:, 2]
+                    wear_index[j] = True
+                for j in superon:
+                    scpred_score.data[:, j] = scpred_cls_score[:, 3]
+                    superon_index[j] = True
+                for j in superat:
+                    scpred_score.data[:, j] = scpred_cls_score[:, 4]
+                    superat_index[j] = True
+                for j in position:
+                    scpred_score.data[:, j] = scpred_cls_score[:, 5]
+                    position_index[j] = True
+                for j in superin:
+                    scpred_score.data[:, j] = scpred_cls_score[:, 6]
+                    superin_index[j] = True
+                for j in superof:
+                    scpred_score.data[:, j] = scpred_cls_score[:, 7]
+                    superof_index[j] = True
+                for j in superto:
+                    scpred_score.data[:, j] = scpred_cls_score[:, 8]
+                    superto_index[j] = True
+                for j in superother:
+                    scpred_score.data[:, j] = scpred_cls_score[:, 9]
+                    superother_index[j] = True
+                for j in superon1:
+                    superon1_index[j] = True
+                for j in superon2:
+                    superon2_index[j] = True
+                for j in superon3:
+                    superon3_index[j] = True
+                for j in superof1:
+                    superof1_index[j] = True
+                for j in superof2:
+                    superof2_index[j] = True
+                for j in superof3:
+                    superof3_index[j] = True
+                for j in superto1:
+                    superto1_index[j] = True
+                for j in superto2:
+                    superto2_index[j] = True
+                scpred_score.data[:, 0] = scpred_cls_score[:, 0]
 
-                    pred_cls_logits[:, doing_index] = F_softmax(pred_cls_logits[:, doing_index], dim=1).type(torch_float16)
-                    pred_cls_logits[:, wear_index] = F_softmax(pred_cls_logits[:, wear_index], dim=1).type(torch_float16)
-                    pred_cls_logits[:, superon1_index] = F_softmax(pred_cls_logits[:, superon1_index], dim=1).type(torch_float16)
-                    pred_cls_logits[:, superon2_index] = F_softmax(pred_cls_logits[:, superon2_index], dim=1).type(torch_float16)
-                    pred_cls_logits[:, superon3_index] = F_softmax(pred_cls_logits[:, superon3_index], dim=1).type(torch_float16)
-                    pred_cls_logits[:, superat_index] = F_softmax(pred_cls_logits[:, superat_index], dim=1).type(torch_float16)
-                    pred_cls_logits[:, position_index] = F_softmax(pred_cls_logits[:, position_index], dim=1).type(torch_float16)
-                    pred_cls_logits[:, superin_index] = F_softmax(pred_cls_logits[:, superin_index], dim=1).type(torch_float16)
-                    pred_cls_logits[:, superof1_index] = F_softmax(pred_cls_logits[:, superof1_index], dim=1).type(torch_float16)
-                    pred_cls_logits[:, superof2_index] = F_softmax(pred_cls_logits[:, superof2_index], dim=1).type(torch_float16)
-                    pred_cls_logits[:, superof3_index] = F_softmax(pred_cls_logits[:, superof3_index], dim=1).type(torch_float16)
-                    pred_cls_logits[:, superto1_index] = F_softmax(pred_cls_logits[:, superto1_index], dim=1).type(torch_float16)
-                    pred_cls_logits[:, superto2_index] = F_softmax(pred_cls_logits[:, superto2_index], dim=1).type(torch_float16)
-                    pred_cls_logits[:, superother_index] = F_softmax(pred_cls_logits[:, superother_index], dim=1).type(torch_float16)
-                    pred_cls_logits[:, 0] = 1
-                    pred_cls_logits = pred_cls_logits * scpred_score.data * scpred2_score.data
-                    # print(pred_cls_logits.shape)
-                    # print(pred_cls_logits.sum(dim=1))
+                pred_cls_logits[:, doing_index] = F_softmax(pred_cls_logits[:, doing_index], dim=1).type(torch_float16)
+                pred_cls_logits[:, wear_index] = F_softmax(pred_cls_logits[:, wear_index], dim=1).type(torch_float16)
+                pred_cls_logits[:, superon1_index] = F_softmax(pred_cls_logits[:, superon1_index], dim=1).type(torch_float16)
+                pred_cls_logits[:, superon2_index] = F_softmax(pred_cls_logits[:, superon2_index], dim=1).type(torch_float16)
+                pred_cls_logits[:, superon3_index] = F_softmax(pred_cls_logits[:, superon3_index], dim=1).type(torch_float16)
+                pred_cls_logits[:, superat_index] = F_softmax(pred_cls_logits[:, superat_index], dim=1).type(torch_float16)
+                pred_cls_logits[:, position_index] = F_softmax(pred_cls_logits[:, position_index], dim=1).type(torch_float16)
+                pred_cls_logits[:, superin_index] = F_softmax(pred_cls_logits[:, superin_index], dim=1).type(torch_float16)
+                pred_cls_logits[:, superof1_index] = F_softmax(pred_cls_logits[:, superof1_index], dim=1).type(torch_float16)
+                pred_cls_logits[:, superof2_index] = F_softmax(pred_cls_logits[:, superof2_index], dim=1).type(torch_float16)
+                pred_cls_logits[:, superof3_index] = F_softmax(pred_cls_logits[:, superof3_index], dim=1).type(torch_float16)
+                pred_cls_logits[:, superto1_index] = F_softmax(pred_cls_logits[:, superto1_index], dim=1).type(torch_float16)
+                pred_cls_logits[:, superto2_index] = F_softmax(pred_cls_logits[:, superto2_index], dim=1).type(torch_float16)
+                pred_cls_logits[:, superother_index] = F_softmax(pred_cls_logits[:, superother_index], dim=1).type(torch_float16)
+                pred_cls_logits[:, 0] = 1
+                pred_cls_logits = pred_cls_logits * scpred_score.data * scpred2_score.data
+                # print(pred_cls_logits.shape)
+                # print(pred_cls_logits.sum(dim=1))
 
-                    # Concatenate scpred_cls_score, superon_cls_score, superof_cls_score, superto_cls_score
-                    scpred_cls_score = torch_cat((scpred_cls_score, superon_cls_score, superof_cls_score, superto_cls_score), dim=1)
+                # Concatenate scpred_cls_score, superon_cls_score, superof_cls_score, superto_cls_score
+                scpred_cls_score = torch_cat((scpred_cls_score, superon_cls_score, superof_cls_score, superto_cls_score), dim=1)
 
             # -----------------------
             # 上面是使用 BPL 方法的逻辑
