@@ -20,6 +20,7 @@ def train_evaluate(verbose = False):
     evaluator = BasicSceneGraphEvaluator.all_modes()  # for calculating recall
     evaluator_multiple_preds = BasicSceneGraphEvaluator.all_modes(multiple_preds=True)
 
+    # 该函数接收一个可迭代对象，返回一个行为与原对象相同的迭代器，但在每次请求值时打印动态更新的进度条。
     prog_bar = tqdm(enumerate(train_full_loader), total=int(len(train_full) / train_full_loader.batch_size), disable = not verbose)
 
     with torch_no_grad():

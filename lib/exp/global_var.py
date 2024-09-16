@@ -17,6 +17,8 @@ codebase = '/output/HiKER-SGG/'  # 项目根目录
 sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
 exp_name = 'hikersgg_predcls_train'
 write = tqdm.write  # 函数引用赋值，用来打印日志
+use_bpl = True # 启用还是关闭 BPL 方法
+use_sa = False # 启用还是关闭 SA 方法
 
 # 创建配置类，加载配置
 # vgrel-11 是 GB-Net 提供的预训练模型，HiKER-SGG 的核心部分(GNN)和 GB-Net 非常接近
@@ -27,7 +29,8 @@ conf = ModelConfig(f'''
 -ckpt ../data/checkpoints/vgdet/vgrel-11.tar
 -val_size 5000
 -adam
--b 3
+-b 8
+-nwork 24
 -ngpu 1
 -lr 1e-4
 ''')
@@ -38,7 +41,6 @@ conf.MODEL.CONF_MAT_FREQ_TRAIN = '/output/data/misc/conf_mat_freq_train.npy'  # 
 conf.MODEL.LRGA.USE_LRGA = False
 conf.MODEL.USE_ONTOLOGICAL_ADJUSTMENT = False
 conf.MODEL.NORMALIZE_EOA = False
-conf.num_workers = 9
 # conf.MODEL.LRGA.K = 50
 # conf.MODEL.LRGA.DROPOUT = 0.5
 # conf.MODEL.GN.NUM_GROUPS = 1024//8
@@ -46,13 +48,13 @@ conf.num_workers = 9
 # ------------------------------------------------------------------------------------
 
 # VG 类继承自 Dataset 类，把数据集拆分为训练集、验证集、测试集，参数作为关键字参数传入
-# take train_full for evaluating the confusion matrix;
+# take train_full for evaluating the confusion matrix; return size: 57723, 5000, 26446
 train_full, _val, _test = VG.splits(num_val_im=conf.val_size, filter_duplicate_rels=True,
                                     use_proposals=conf.use_proposals,
                                     filter_non_overlap=conf.mode == 'sgdet', with_clean_classifier=False,
                                     get_state=False)
 
-# VGDataLoader 类继承自 Dataloader 类，作为迭代器拿取 batch
+# VGDataLoader 类继承自 Dataloader 类，作为迭代器拿取 batch; return size: 7215, 57723
 _, train_full_loader = VGDataLoader.splits(train_full, train_full, mode='rel',
                                            batch_size=conf.batch_size,
                                            num_workers=conf.num_workers,
@@ -62,13 +64,13 @@ _, train_full_loader = VGDataLoader.splits(train_full, train_full, mode='rel',
 # ------------------------------------------------------------------------------------
 
 # 这里的 split 的目的好像是用来训练
-# with_clean_classifier==True 表示使用 BPL Method，该方法出自论文 SGG-G2S
+# with_clean_classifier==True 表示使用 BPL Method，该方法出自论文 SGG-G2S; return size: 16832, 5000, 26446
 train, val, test = VG.splits(num_val_im=conf.val_size, filter_duplicate_rels=True,
                              use_proposals=conf.use_proposals,
-                             filter_non_overlap=conf.mode == 'sgdet', with_clean_classifier=True,
+                             filter_non_overlap=conf.mode == 'sgdet', with_clean_classifier=use_bpl,
                              get_state=False)
 
-# 这里的两个集合经过 BPL 方法平衡后，会少很多头部谓词样本，在 SGG-G2S 的论文中拿来微调最后的层
+# 这里的两个集合经过 BPL 方法平衡后，会少很多头部谓词样本，在 SGG-G2S 的论文中拿来微调最后的层; return size: 2104, 5000
 train_loader, val_loader = VGDataLoader.splits(train, val, mode='rel',
                                                batch_size=conf.batch_size,
                                                num_workers=conf.num_workers,
@@ -92,7 +94,7 @@ detector = KERN(classes=train.ind_to_classes, rel_classes=train.ind_to_predicate
                 # 存储着训练集中每个谓词的词频
                 rel_counts_path=os.path.join(codebase, 'graphs/001/pred_counts.pkl'),
                 use_knowledge=True, use_embedding=True, refine_obj_cls=False,
-                class_volume=1.0, with_clean_classifier=True, with_transfer=True, sa=True, config=conf,
+                class_volume=1.0, with_clean_classifier=use_bpl, with_transfer=use_sa, sa=use_sa, config=conf,
                 )
 
 # Freeze the detector 冻结参数
