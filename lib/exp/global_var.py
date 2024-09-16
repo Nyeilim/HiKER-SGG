@@ -17,7 +17,7 @@ codebase = '/output/HiKER-SGG/'  # 项目根目录
 sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
 exp_name = 'hikersgg_predcls_train'
 write = tqdm.write  # 函数引用赋值，用来打印日志
-use_bpl = False # 启用还是关闭 BPL 方法
+use_bpl = True # 启用还是关闭 BPL 方法
 use_sa = False # 启用还是关闭 SA 方法
 
 # 创建配置类，加载配置
