@@ -71,6 +71,8 @@ train, val, test = VG.splits(num_val_im=conf.val_size, filter_duplicate_rels=Tru
                              get_state=False)
 
 # 这里的两个集合经过 BPL 方法平衡后，会少很多头部谓词样本，在 SGG-G2S 的论文中拿来微调最后的层; return size: 2104, 5000
+# 它的这个 train_loader 的大小其实反应的是 batch_sampler size，说白了就是批次个数，2104 = 16832/8
+# batch_sampler 是一个可迭代的对象，它返回一系列的索引列表（batches），每个列表代表一个批次。batch_sampler 可以自定义如何从数据集中抽取批次。
 train_loader, val_loader = VGDataLoader.splits(train, val, mode='rel',
                                                batch_size=conf.batch_size,
                                                num_workers=conf.num_workers,
