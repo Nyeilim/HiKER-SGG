@@ -412,11 +412,11 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
 
     # 这里的 graphs_file 就是数据集的二进制标注文件
     with h5py_File(graphs_file, 'r') as roi_h5:
-        data_split = roi_h5['split'][:] # 长度为 108073 的数组，每个元素为 0(代表训练集) 或者 2(代表测试集)
+        data_split = roi_h5['split'][:] # 长度为 108073(75651+32422) 的数组，每个元素为 0(代表训练集) 或者 2(代表测试集)
         split = 2 if mode == 'test' else 0
         split_mask = data_split == split # 长度为 108073 的数组，每个位置为 True 或者 False
 
-        # Filter out images without bounding boxes; 过滤掉没有 bbox 的图片
+        # 过滤(filter out)图片，过滤结果：62723/75651，26446/32422
         split_mask &= roi_h5['img_to_first_box'][:] >= 0 # 没有 bbox 的图片，这项会被标记为 -1
         if filter_empty_rels:
             split_mask &= roi_h5['img_to_first_rel'][:] >= 0 # 没有 rel 的图片，这项会被标记为 -1
@@ -448,7 +448,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
         all_boxes[:, 2:] = all_boxes[:, :2] + all_boxes[:, 2:]
 
         # 前面说到属于某张图片的 bbox, rel 会被排列在连续的索引中，这里的 first, last 其实就是来框定这个索引区间（左右闭合）的
-        # 比如 roi_h5['img_to_first_box'][1] = 15, roi_h5['img_to_first_box'][1] = 21
+        # 比如 roi_h5['img_to_first_box'][1] = 15, roi_h5['img_to_last_box'][1] = 21
         # 那我们就可以知道索引为 1 的图片，它的 bbox 是 all_boxes[15:21+1, :]；rel 同理
         # 至于 split_mask 其实就是我们的“取出图片”，它这里使用的是 numpy 的高级索引语法
         # 把与“取出图片”相关的信息收集起来，然后放到单独的 List 中，顺序第0张【而不是索引为0】“取出图片”的对应信息会放到 List[0]
@@ -458,14 +458,14 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
         im_to_last_rel = roi_h5['img_to_last_rel'][split_mask]
 
         # load relation labels; 数据集中一共标注了 622705 个关系
-        _relations = roi_h5['relationships'][:] # shape(622705, 2)，大胆猜测这个是三元组 <s,p,o> 中的 <s,o>，每个元素是 bbox 索引
-        _relation_predicates = roi_h5['predicates'][:, 0] # shape(622705,)，大胆猜测这个是三元组 <s,p,o> 中的 <p>，每个元素是谓词索引
+        _relations = roi_h5['relationships'][:] # shape(622705, 2)，这个是三元组 <s,p,o> 中的 <s,o>，每个元素是 bbox 索引
+        _relation_predicates = roi_h5['predicates'][:, 0] # shape(622705,)，这个是三元组 <s,p,o> 中的 <p>，每个元素是谓词索引
 
     # 上面这段都是对二进制标注文件的处理，下面这个是对数据一致性确认，确保数据能够匹配上
     assert (im_to_first_rel.shape[0] == im_to_last_rel.shape[0])
     assert (_relations.shape[0] == _relation_predicates.shape[0])  # sanity check
 
-    # Get everything by image.
+    # 位于外层循环的变量，将在这里收集所有数据集样本的 bbox, rel
     boxes = []
     gt_classes = []
     # gt_attributes = []
@@ -504,7 +504,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
     all_classes_count = {}
     # image_index 的元素内容是“取出图片”的索引【但是用不上】，索引是“取出图片”的顺序号
     for i in range(len(image_index)):
-        # 取出单张图片的信息
+        # 取出单张图片的信息区间
         i_obj_start = im_to_first_box[i]
         i_obj_end = im_to_last_box[i]
         i_rel_start = im_to_first_rel[i]
@@ -515,6 +515,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
         gt_classes_i = all_labels[i_obj_start: i_obj_end + 1]
         # gt_attributes_i = all_attributes[i_obj_start: i_obj_end + 1, :]
 
+        # 取出单张图片的 rel
         if i_rel_start >= 0:
             predicates = _relation_predicates[i_rel_start: i_rel_end + 1]
             # 这里可以理解成，本来 _relations 里面装的是每个 bbox 的绝对索引，转换为对于某个图片 i_obj_start 的相对索引
@@ -527,7 +528,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
             rels = np_zeros((0, 3), dtype=np_int32)
 
         # ---------------------------------------------------------------------------
-        # 外层循环在运行完上面的代码后，其实就已经完成 bbox，rel 的整理，下面分别是 重叠过滤 以及 BPL
+        # 外层循环在运行完上面的代码后，其实就已经完成单张图片 bbox，rel 的整理，下面分别是 重叠过滤 以及 BPL
         # ---------------------------------------------------------------------------
 
         # 在训练时，是否过滤掉没有重叠 bbox 的图像，不重叠的 bbox 常常被认为是没有关系的
