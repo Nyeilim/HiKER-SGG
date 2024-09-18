@@ -1,6 +1,6 @@
-import numpy as np
 import os
-import sys
+
+import numpy as np
 import torch
 from tqdm import tqdm
 
@@ -14,7 +14,6 @@ from lib.pytorch_misc import optimistic_restore
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 选择显卡
 codebase = '/output/HiKER-SGG/'  # 项目根目录
-sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
 exp_name = 'hikersgg_predcls_train'
 write = tqdm.write  # 函数引用赋值，用来打印日志
 use_bpl = True # 启用还是关闭 BPL 方法

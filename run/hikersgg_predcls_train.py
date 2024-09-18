@@ -21,7 +21,7 @@ detector, optimizer = amp.initialize(detector, optimizer, opt_level="O0")
 
 conf_matrix_list = []
 for epoch in range(start_epoch, end_epoch):
-    if (epoch + 1) % 3 == 0:
+    if (epoch + 1) % 3 == 0:    # 每三轮重新计算一次混淆矩阵，后面的数字为 2,5,8,11
         print('Evaluating new confusion matrix...')
         conf_matrix = train_evaluate()  # 获取新的谓词混淆矩阵(见 3.7)，这个玩意应该是对 curEpoch - 1 轮最终结果的评估
         conf_matrix[0, :] = 0.0
