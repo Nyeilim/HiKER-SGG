@@ -38,7 +38,11 @@ conf = ModelConfig(f'''
 
 # Also load the corresponding confusion matrix, Remember to change to the path of the confusion matrix
 matrix_suffix = test_epoch - (test_epoch + 1) % 3   # 混淆矩阵会每三轮计算一次
-conf_matrix = np.load(f'/output/data/misc/conf/conf_mat_updated_{matrix_suffix}.npy') # 设置模型对应的混淆矩阵
+# 设置模型对应的混淆矩阵
+if matrix_suffix < 2:
+    conf_matrix =  np.load('/output/data/misc/conf_mat_freq_train.npy')
+else:
+    conf_matrix = np.load(f'/output/data/misc/conf/conf_mat_updated_{matrix_suffix}.npy')
 np.save('/output/data/misc/conf_mat_updated.npy', conf_matrix)
 conf.MODEL.CONF_MAT_FREQ_TRAIN = '/output/data/misc/conf_mat_freq_train.npy'
 conf.MODEL.LRGA.USE_LRGA = False
