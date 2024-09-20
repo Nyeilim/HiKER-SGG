@@ -1,15 +1,14 @@
 import os
 import sys
 
+sys.path.append("/output/HiKER-SGG/")   # 添加环境变量，不然无法读取代码中的包
+
 import numpy as np
 import torch
 from tqdm import tqdm
 
-from lib.exp.exp_util import load_best_matrices
-
-sys.path.append("/output/HiKER-SGG/")   # 添加环境变量，不然无法读取代码中的包
-
 from config import ModelConfig
+from lib.exp.exp_util import load_best_matrices
 from lib.pytorch_misc import optimistic_restore
 from lib.exp.val_fn import _val_epoch
 from lib.pytorch_misc import print_para
