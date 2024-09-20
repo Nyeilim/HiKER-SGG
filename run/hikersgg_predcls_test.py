@@ -11,8 +11,8 @@ from config import ModelConfig
 from lib.exp.exp_util import load_best_matrices
 from lib.pytorch_misc import optimistic_restore
 from lib.pytorch_misc import print_para
-from lib.my_model_24 import KERN
 from dataloaders.visual_genome import VGDataLoader, VG
+from lib.my_model_24 import KERN
 
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 codebase = '/output/HiKER-SGG/'
