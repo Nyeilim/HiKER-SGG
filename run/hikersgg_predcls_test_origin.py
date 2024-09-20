@@ -1,31 +1,20 @@
-#%%
-import sys
 import os
+import sys
+
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 codebase = '/output/HiKER-SGG/'
 sys.path.append("/output/HiKER-SGG/")
-# sys.path.append('../../../')
-# sys.path.append('../../../apex')
-#%%
-import torch
-#%%
+
 exp_name = 'hikersgg_predcls_test' # Change to the experiment name
 #%%
 import os
-from time import time as time_time
 import numpy as np
-# from torch import optim
-from apex import amp
 import torch
-import pandas as pd
 from tqdm import tqdm
 write = tqdm.write
 
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-
 from config import ModelConfig, BOX_SCALE, IM_SCALE
-from torch.nn import functional as F
-from lib.pytorch_misc import optimistic_restore, de_chunkize, clip_grad_norm
+from lib.pytorch_misc import optimistic_restore
 from lib.evaluation.sg_eval import BasicSceneGraphEvaluator, calculate_mR_from_evaluator_list, eval_entry
 from lib.pytorch_misc import print_para
 from dataloaders.visual_genome import VGDataLoader, VG
@@ -112,6 +101,7 @@ print(print_para(detector), flush=True)
 #%%
 from torch import no_grad as torch_no_grad
 from tqdm import tqdm
+from torch.cuda.amp import autocast
 
 def val_epoch():
     detector.eval()
@@ -139,9 +129,6 @@ def val_epoch():
 
     detector.train()
     return recall, recall_mp, mean_recall, mean_recall_mp
-
-#%%
-from torch.cuda.amp import autocast
 
 def val_batch(batch_num, b, evaluator, evaluator_multiple_preds, evaluator_list, evaluator_multiple_preds_list):
     with autocast():
