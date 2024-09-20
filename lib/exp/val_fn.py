@@ -29,6 +29,7 @@ def _val_epoch(_conf, _detector, _ind_to_predicates, _val_loader, _val, verbose)
             val_batch(_conf.num_gpus * val_b, batch, evaluator, evaluator_multiple_preds, evaluator_list,
                       evaluator_multiple_preds_list)
 
+    # mp 拿到的是无 constraint 的指标
     recall = evaluator[_conf.mode].print_stats()
     recall_mp = evaluator_multiple_preds[_conf.mode].print_stats()
 

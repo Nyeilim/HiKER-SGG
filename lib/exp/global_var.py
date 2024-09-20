@@ -23,9 +23,9 @@ use_sa = False # 启用还是关闭 SA 方法
 # vgrel-11 是 GB-Net 提供的预训练模型，HiKER-SGG 的核心部分(GNN)和 GB-Net 非常接近
 conf = ModelConfig(f'''
 -m predcls -p 2500 -clip 5
--tb_log_dir ../data/summaries/kern_predcls/{exp_name}
--save_dir ../data/checkpoints/kern_predcls/{exp_name}
--ckpt ../data/checkpoints/vgdet/vgrel-11.tar
+-tb_log_dir /output/data/summaries/kern_predcls/{exp_name}
+-save_dir /output/data/checkpoints/kern_predcls/{exp_name}
+-ckpt /output/data/checkpoints/vgdet/vgrel-11.tar
 -val_size 5000
 -adam
 -b 8

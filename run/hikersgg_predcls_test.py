@@ -5,6 +5,8 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
+from lib.exp.exp_util import load_best_matrices
+
 sys.path.append("/output/HiKER-SGG/")   # 添加环境变量，不然无法读取代码中的包
 
 from config import ModelConfig
@@ -20,13 +22,14 @@ exp_name = 'hikersgg_predcls_test'
 write = tqdm.write  # 函数引用赋值，用来打印日志
 use_bpl = True # 启用还是关闭 BPL 方法
 use_sa = False # 启用还是关闭 SA 方法
-test_epoch = 10 # 需要测试第几个 epoch 训练出来的模型
+test_epoch = load_best_matrices()['best_mr_epoch'] # 需要测试第几个 epoch 训练出来的模型
+print(f"Start test epoch {test_epoch}")
 
 # Change ckpt path for the evaluated model
 # If you want to test on VG-C benchmark, include "-test_n" in the command line
 conf = ModelConfig(f'''
 -m predcls -p 2500 -clip 5
--ckpt ../data/checkpoints/kern_predcls/hikersgg_predcls_train/vgrel-{test_epoch}.tar
+-ckpt /output/data/checkpoints/kern_predcls/hikersgg_predcls_train/vgrel-{test_epoch}.tar
 -b 8
 -ngpu 1
 -nwork 24
