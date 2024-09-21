@@ -12,6 +12,7 @@ sys.path.append("/output/HiKER-SGG/")
 from config import ModelConfig, BOX_SCALE, IM_SCALE
 from lib.exp.exp_util import load_best_matrices
 from lib.pytorch_misc import optimistic_restore
+# 如果把 sg_val 放在 my_model_24, visual_genome 后面就会导入报错，因为里面有个很重要的 setup 语句能导入 lib.fpn.box_intersections_cpu.bbox
 from lib.evaluation.sg_eval import BasicSceneGraphEvaluator, calculate_mR_from_evaluator_list, eval_entry
 from lib.pytorch_misc import print_para
 from dataloaders.visual_genome import VGDataLoader, VG

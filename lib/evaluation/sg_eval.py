@@ -13,8 +13,8 @@ from lib.pytorch_misc import intersect_2d, argsort_desc
 
 import numpy
 import pyximport
-pyximport.install(setup_args={"include_dirs":numpy.get_include()},
-                  reload_support=True)
+# numpy.get_include(): '/output/hiker-sgg/lib/python3.8/site-packages/numpy/core/include'
+pyximport.install(setup_args={"include_dirs":numpy.get_include()}, reload_support=True)
 
 from lib.fpn.box_intersections_cpu.bbox import bbox_overlaps
 from config import MODES
