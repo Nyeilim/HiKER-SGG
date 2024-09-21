@@ -128,7 +128,7 @@ def val_epoch():
     evaluator = BasicSceneGraphEvaluator.all_modes() # for calculating recall
     evaluator_multiple_preds = BasicSceneGraphEvaluator.all_modes(multiple_preds=True)
 
-    prog_bar = tqdm(enumerate(val_loader), total=int(len(val)/val_loader.batch_size))
+    prog_bar = tqdm(enumerate(val_loader), total=int(len(val)/val_loader.batch_size), verbos=False) # 关闭进度条
 
     with torch_no_grad():
         for val_b, batch in prog_bar:

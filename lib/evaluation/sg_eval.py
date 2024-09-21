@@ -16,7 +16,7 @@ import pyximport
 # numpy.get_include(): '/output/hiker-sgg/lib/python3.8/site-packages/numpy/core/include'
 pyximport.install(setup_args={"include_dirs":numpy.get_include()}, reload_support=True)
 
-from lib.fpn.box_intersections_cpu.bbox import bbox_overlaps
+from lib.fpn.box_intersections_cpu.bbox import bbox_overlaps    # 这行在首次运行时会在终端弹出编译信息
 from config import MODES
 np_set_printoptions(precision=3)
 
