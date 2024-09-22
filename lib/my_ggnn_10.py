@@ -415,6 +415,7 @@ class GGNN(Module):
                     pred_adj_nor = torch_tensor(pred_adj_np, dtype=torch_float32, device=CUDA_DEVICE)
                     pred_cls_logits = (pred_adj_nor @ pred_cls_logits.T).T
 
+                pred_cls_logits.type(torch_float32)
                 scpred_score = torch_zeros_like(pred_cls_logits, requires_grad=True, device=CUDA_DEVICE, dtype=torch_float32)
                 scpred2_score = torch_ones_like(pred_cls_logits, requires_grad=True, device=CUDA_DEVICE, dtype=torch_float32)
                 for i in superon1:
