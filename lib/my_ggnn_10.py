@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from torch import tensor as torch_tensor, float32 as torch_float32, \
     int64 as torch_int64, arange as torch_arange, mm as torch_mm, \
-    zeros as torch_zeros, bool as torch_bool, float16 as torch_float16, \
+    zeros as torch_zeros, bool as torch_bool, float16 as torch_float32, \
     sigmoid as torch_sigmoid, tanh as torch_tanh, cat as torch_cat, zeros_like as torch_zeros_like, \
     ones_like as torch_ones_like
 from torch.cuda import current_device
@@ -496,20 +496,20 @@ class GGNN(Module):
                     superto2_index[j] = True
                 scpred_score.data[:, 0] = scpred_cls_score[:, 0]
 
-                pred_cls_logits[:, doing_index] = F_softmax(pred_cls_logits[:, doing_index], dim=1).type(torch_float16)
-                pred_cls_logits[:, wear_index] = F_softmax(pred_cls_logits[:, wear_index], dim=1).type(torch_float16)
-                pred_cls_logits[:, superon1_index] = F_softmax(pred_cls_logits[:, superon1_index], dim=1).type(torch_float16)
-                pred_cls_logits[:, superon2_index] = F_softmax(pred_cls_logits[:, superon2_index], dim=1).type(torch_float16)
-                pred_cls_logits[:, superon3_index] = F_softmax(pred_cls_logits[:, superon3_index], dim=1).type(torch_float16)
-                pred_cls_logits[:, superat_index] = F_softmax(pred_cls_logits[:, superat_index], dim=1).type(torch_float16)
-                pred_cls_logits[:, position_index] = F_softmax(pred_cls_logits[:, position_index], dim=1).type(torch_float16)
-                pred_cls_logits[:, superin_index] = F_softmax(pred_cls_logits[:, superin_index], dim=1).type(torch_float16)
-                pred_cls_logits[:, superof1_index] = F_softmax(pred_cls_logits[:, superof1_index], dim=1).type(torch_float16)
-                pred_cls_logits[:, superof2_index] = F_softmax(pred_cls_logits[:, superof2_index], dim=1).type(torch_float16)
-                pred_cls_logits[:, superof3_index] = F_softmax(pred_cls_logits[:, superof3_index], dim=1).type(torch_float16)
-                pred_cls_logits[:, superto1_index] = F_softmax(pred_cls_logits[:, superto1_index], dim=1).type(torch_float16)
-                pred_cls_logits[:, superto2_index] = F_softmax(pred_cls_logits[:, superto2_index], dim=1).type(torch_float16)
-                pred_cls_logits[:, superother_index] = F_softmax(pred_cls_logits[:, superother_index], dim=1).type(torch_float16)
+                pred_cls_logits[:, doing_index] = F_softmax(pred_cls_logits[:, doing_index], dim=1).type(torch_float32)
+                pred_cls_logits[:, wear_index] = F_softmax(pred_cls_logits[:, wear_index], dim=1).type(torch_float32)
+                pred_cls_logits[:, superon1_index] = F_softmax(pred_cls_logits[:, superon1_index], dim=1).type(torch_float32)
+                pred_cls_logits[:, superon2_index] = F_softmax(pred_cls_logits[:, superon2_index], dim=1).type(torch_float32)
+                pred_cls_logits[:, superon3_index] = F_softmax(pred_cls_logits[:, superon3_index], dim=1).type(torch_float32)
+                pred_cls_logits[:, superat_index] = F_softmax(pred_cls_logits[:, superat_index], dim=1).type(torch_float32)
+                pred_cls_logits[:, position_index] = F_softmax(pred_cls_logits[:, position_index], dim=1).type(torch_float32)
+                pred_cls_logits[:, superin_index] = F_softmax(pred_cls_logits[:, superin_index], dim=1).type(torch_float32)
+                pred_cls_logits[:, superof1_index] = F_softmax(pred_cls_logits[:, superof1_index], dim=1).type(torch_float32)
+                pred_cls_logits[:, superof2_index] = F_softmax(pred_cls_logits[:, superof2_index], dim=1).type(torch_float32)
+                pred_cls_logits[:, superof3_index] = F_softmax(pred_cls_logits[:, superof3_index], dim=1).type(torch_float32)
+                pred_cls_logits[:, superto1_index] = F_softmax(pred_cls_logits[:, superto1_index], dim=1).type(torch_float32)
+                pred_cls_logits[:, superto2_index] = F_softmax(pred_cls_logits[:, superto2_index], dim=1).type(torch_float32)
+                pred_cls_logits[:, superother_index] = F_softmax(pred_cls_logits[:, superother_index], dim=1).type(torch_float32)
                 pred_cls_logits[:, 0] = 1
                 pred_cls_logits = pred_cls_logits * scpred_score.data * scpred2_score.data
                 # print(pred_cls_logits.shape)
@@ -600,18 +600,18 @@ class GGNN(Module):
                         food_index[j] = True
                     scent_score.data[:, 0] = scent_cls_score[:, 0]
 
-                    ent_cls_logits[:, part_index] = F_softmax(ent_cls_logits[:, part_index], dim=1).type(torch_float16)
-                    ent_cls_logits[:, artifact_index] = F_softmax(ent_cls_logits[:, artifact_index], dim=1).type(torch_float16)
-                    ent_cls_logits[:, person_index] = F_softmax(ent_cls_logits[:, person_index], dim=1).type(torch_float16)
-                    ent_cls_logits[:, clothes_index] = F_softmax(ent_cls_logits[:, clothes_index], dim=1).type(torch_float16)
-                    ent_cls_logits[:, vehicle_index] = F_softmax(ent_cls_logits[:, vehicle_index], dim=1).type(torch_float16)
-                    ent_cls_logits[:, flora_index] = F_softmax(ent_cls_logits[:, flora_index], dim=1).type(torch_float16)
-                    ent_cls_logits[:, location_index] = F_softmax(ent_cls_logits[:, location_index], dim=1).type(torch_float16)
-                    ent_cls_logits[:, furniture_index] = F_softmax(ent_cls_logits[:, furniture_index], dim=1).type(torch_float16)
-                    ent_cls_logits[:, animal_index] = F_softmax(ent_cls_logits[:, animal_index], dim=1).type(torch_float16)
-                    ent_cls_logits[:, structure_index] = F_softmax(ent_cls_logits[:, structure_index], dim=1).type(torch_float16)
-                    ent_cls_logits[:, building_index] = F_softmax(ent_cls_logits[:, building_index], dim=1).type(torch_float16)
-                    ent_cls_logits[:, food_index] = F_softmax(ent_cls_logits[:, food_index], dim=1).type(torch_float16)
+                    ent_cls_logits[:, part_index] = F_softmax(ent_cls_logits[:, part_index], dim=1).type(torch_float32)
+                    ent_cls_logits[:, artifact_index] = F_softmax(ent_cls_logits[:, artifact_index], dim=1).type(torch_float32)
+                    ent_cls_logits[:, person_index] = F_softmax(ent_cls_logits[:, person_index], dim=1).type(torch_float32)
+                    ent_cls_logits[:, clothes_index] = F_softmax(ent_cls_logits[:, clothes_index], dim=1).type(torch_float32)
+                    ent_cls_logits[:, vehicle_index] = F_softmax(ent_cls_logits[:, vehicle_index], dim=1).type(torch_float32)
+                    ent_cls_logits[:, flora_index] = F_softmax(ent_cls_logits[:, flora_index], dim=1).type(torch_float32)
+                    ent_cls_logits[:, location_index] = F_softmax(ent_cls_logits[:, location_index], dim=1).type(torch_float32)
+                    ent_cls_logits[:, furniture_index] = F_softmax(ent_cls_logits[:, furniture_index], dim=1).type(torch_float32)
+                    ent_cls_logits[:, animal_index] = F_softmax(ent_cls_logits[:, animal_index], dim=1).type(torch_float32)
+                    ent_cls_logits[:, structure_index] = F_softmax(ent_cls_logits[:, structure_index], dim=1).type(torch_float32)
+                    ent_cls_logits[:, building_index] = F_softmax(ent_cls_logits[:, building_index], dim=1).type(torch_float32)
+                    ent_cls_logits[:, food_index] = F_softmax(ent_cls_logits[:, food_index], dim=1).type(torch_float32)
 
                     ent_cls_logits[:, 0] = 1
                     ent_cls_logits = ent_cls_logits * scent_score.data
