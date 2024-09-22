@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from torch import tensor as torch_tensor, float32 as torch_float32, \
     int64 as torch_int64, arange as torch_arange, mm as torch_mm, \
-    zeros as torch_zeros, bool as torch_bool, float16 as torch_float32, \
+    zeros as torch_zeros, bool as torch_bool, \
     sigmoid as torch_sigmoid, tanh as torch_tanh, cat as torch_cat, zeros_like as torch_zeros_like, \
     ones_like as torch_ones_like
 from torch.cuda import current_device
@@ -68,8 +68,8 @@ class GGNN(Module):
         if use_embedding:
             with open(emb_path, 'rb') as fin:
                 self.emb_ent, self.emb_pred = pickle_load(fin)
-            self.emb_ent = wrap(self.emb_ent).type(torch_float32)
-            self.emb_pred = wrap(self.emb_pred).type(torch_float32)
+            self.emb_ent = wrap(self.emb_ent)
+            self.emb_pred = wrap(self.emb_pred)
         else:
             self.emb_ent = torch.eye(num_ents, dtype=torch_float32)
             self.emb_pred = torch.eye(num_preds, dtype=torch_float32)
