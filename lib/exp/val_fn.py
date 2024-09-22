@@ -7,14 +7,12 @@ from config import BOX_SCALE, IM_SCALE
 from lib.evaluation.sg_eval import BasicSceneGraphEvaluator, calculate_mR_from_evaluator_list, eval_entry
 from lib.exp.global_var import conf, detector, ind_to_predicates, val_loader, val
 
-def val_epoch(verbose=False):
-    return _val_epoch(conf, detector,ind_to_predicates, val_loader, val, verbose)
 
-def _val_epoch(_conf, _detector, _ind_to_predicates, _val_loader, _val, verbose):
-    _detector.eval()
+def val_epoch(verbose=False):
+    detector.eval()
     evaluator_list = []  # for calculating recall of each relationship except no relationship
     evaluator_multiple_preds_list = []
-    for index, name in enumerate(_ind_to_predicates):
+    for index, name in enumerate(ind_to_predicates):
         if index == 0:
             continue
         evaluator_list.append((index, name, BasicSceneGraphEvaluator.all_modes()))
@@ -22,21 +20,21 @@ def _val_epoch(_conf, _detector, _ind_to_predicates, _val_loader, _val, verbose)
     evaluator = BasicSceneGraphEvaluator.all_modes()  # for calculating recall
     evaluator_multiple_preds = BasicSceneGraphEvaluator.all_modes(multiple_preds=True)
 
-    prog_bar = tqdm(enumerate(_val_loader), total=int(len(_val) / _val_loader.batch_size), disable=not verbose)
+    prog_bar = tqdm(enumerate(val_loader), total=int(len(val) / val_loader.batch_size), disable=not verbose)
 
     with torch_no_grad():
         for val_b, batch in prog_bar:
-            val_batch(_conf.num_gpus * val_b, batch, evaluator, evaluator_multiple_preds, evaluator_list,
+            val_batch(conf.num_gpus * val_b, batch, evaluator, evaluator_multiple_preds, evaluator_list,
                       evaluator_multiple_preds_list)
 
     # mp 拿到的是无 constraint 的指标
-    recall = evaluator[_conf.mode].print_stats()
-    recall_mp = evaluator_multiple_preds[_conf.mode].print_stats()
+    recall = evaluator[conf.mode].print_stats()
+    recall_mp = evaluator_multiple_preds[conf.mode].print_stats()
 
-    mean_recall = calculate_mR_from_evaluator_list(evaluator_list, _conf.mode)
-    mean_recall_mp = calculate_mR_from_evaluator_list(evaluator_multiple_preds_list, _conf.mode, multiple_preds=True)
+    mean_recall = calculate_mR_from_evaluator_list(evaluator_list, conf.mode)
+    mean_recall_mp = calculate_mR_from_evaluator_list(evaluator_multiple_preds_list, conf.mode, multiple_preds=True)
 
-    _detector.train()
+    detector.train()
     return recall, recall_mp, mean_recall, mean_recall_mp
 
 

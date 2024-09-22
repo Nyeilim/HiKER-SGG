@@ -26,8 +26,8 @@ exp_name = 'hikersgg_predcls_test'
 write = tqdm.write  # 函数引用赋值，用来打印日志
 use_bpl = True # 启用还是关闭 BPL 方法
 use_sa = False # 启用还是关闭 SA 方法
-# test_epoch = load_best_matrices()['best_mr_epoch'] # 需要测试第几个 epoch 训练出来的模型
-test_epoch = 2
+test_epoch = load_best_matrices()['best_mr_epoch'] # 需要测试第几个 epoch 训练出来的模型
+# test_epoch = 2
 print(f"Start test epoch {test_epoch}")
 
 # Change ckpt path for the evaluated model
