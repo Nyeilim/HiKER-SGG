@@ -148,6 +148,6 @@ ckpt = torch.load(conf.ckpt)    # 加载参数文件
 optimistic_restore(detector, ckpt['state_dict'], skip_clean=False)  # 参数导入模型中
 detector.cuda() # 模型移至 CUDA
 print(print_para(detector), flush=True) # 打印模型参数
-summary(detector, input_size=(3, 224, 224)) # 使用 torchsummary 打印模型信息
+summary(detector, input_size=(3, 592, 592)) # 使用 torchsummary 打印模型信息
 detector.eval() # 评估模式，禁用梯度记录
 recall, recall_mp, mean_recall, mean_recall_mp = val_epoch()  # 开始评估
