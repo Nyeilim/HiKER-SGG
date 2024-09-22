@@ -6,7 +6,7 @@ import torch
 from torch import no_grad as torch_no_grad
 from torch.cuda.amp import autocast
 from tqdm import tqdm
-from torchsummary import summary
+from torchinfo import summary
 
 sys.path.append("/output/HiKER-SGG/")
 
@@ -129,7 +129,7 @@ def val_epoch():
     evaluator = BasicSceneGraphEvaluator.all_modes() # for calculating recall
     evaluator_multiple_preds = BasicSceneGraphEvaluator.all_modes(multiple_preds=True)
 
-    prog_bar = tqdm(enumerate(val_loader), total=int(len(val)/val_loader.batch_size), verbose=False) # 关闭进度条
+    prog_bar = tqdm(enumerate(val_loader), total=int(len(val)/val_loader.batch_size), disable=True) # 关闭进度条
 
     with torch_no_grad():
         for val_b, batch in prog_bar:
@@ -148,6 +148,12 @@ ckpt = torch.load(conf.ckpt)    # 加载参数文件
 optimistic_restore(detector, ckpt['state_dict'], skip_clean=False)  # 参数导入模型中
 detector.cuda() # 模型移至 CUDA
 print(print_para(detector), flush=True) # 打印模型参数
-summary(detector, input_size=(3, 592, 592)) # 使用 torchsummary 打印模型信息
+summary(detector,
+        input_data = [torch.randn(size=(1, 3, 592, 592)),
+                      torch.tensor([[444,592,1.184]]),
+                      0,
+                      torch.rand(size=(9,4)),
+                      torch.randint(low=0, high=50, size=(9,2)),
+                      torch.randint(low=0, high=50, size=(5,4))]) # 使用 torchinfo 打印模型信息
 detector.eval() # 评估模式，禁用梯度记录
 recall, recall_mp, mean_recall, mean_recall_mp = val_epoch()  # 开始评估

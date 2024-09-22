@@ -14,6 +14,7 @@ from lib.pytorch_misc import intersect_2d, argsort_desc
 import numpy
 import pyximport
 # numpy.get_include(): '/output/hiker-sgg/lib/python3.8/site-packages/numpy/core/include'
+# 这行语句会自动编译项目里 .pyx 文件，这里会导致两次编译，分别是 box_intersections_cpu 和 draw_rectangles
 pyximport.install(setup_args={"include_dirs":numpy.get_include()}, reload_support=True)
 
 from lib.fpn.box_intersections_cpu.bbox import bbox_overlaps    # 这行在首次运行时会在终端弹出编译信息
