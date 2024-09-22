@@ -68,11 +68,11 @@ class GGNN(Module):
         if use_embedding:
             with open(emb_path, 'rb') as fin:
                 self.emb_ent, self.emb_pred = pickle_load(fin)
-            self.emb_ent = wrap(self.emb_ent)
-            self.emb_pred = wrap(self.emb_pred)
+            self.emb_ent = wrap(self.emb_ent).type(torch_float32)
+            self.emb_pred = wrap(self.emb_pred).type(torch_float32)
         else:
-            self.emb_ent = torch_eye(num_ents, dtype=torch_float32)
-            self.emb_pred = torch_eye(num_preds, dtype=torch_float32)
+            self.emb_ent = torch.eye(num_ents, dtype=torch_float32)
+            self.emb_pred = torch.eye(num_preds, dtype=torch_float32)
 
         self.num_ont_ent = self.emb_ent.size(0)
         assert self.num_ont_ent == num_obj_cls + 12
