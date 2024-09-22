@@ -114,7 +114,7 @@ def val_batch(batch_num, b, evaluator, evaluator_multiple_preds, evaluator_list,
                    evaluator_list, evaluator_multiple_preds_list)
 
 def val_epoch():
-    detector.eval()
+    detector.eval() # 评估模式，禁用梯度记录
     evaluator_list = [] # for calculating recall of each relationship except no relationship
     evaluator_multiple_preds_list = []
     for index, name in enumerate(ind_to_predicates):
@@ -143,12 +143,13 @@ def val_epoch():
 ckpt = torch.load(conf.ckpt)    # 加载参数文件
 optimistic_restore(detector, ckpt['state_dict'], skip_clean=False)  # 参数导入模型中
 detector.cuda() # 模型移至 CUDA
+
 # print(print_para(detector), flush=True) # 打印模型参数
 # print(detector) # 原生方法打印模型结构
+# 使用 torchinfo 打印模型信息
 one_sample = next(iter(val_loader))
 one_sample.scatter()
 summary_data = [*one_sample[0]][:-1]
-summary(detector, input_data=summary_data, col_names=("input_size", "output_size", "num_params"),
-        row_settings=("depth","var_names"), verbose=2) # 使用 torchinfo 打印模型信息
-detector.eval() # 评估模式，禁用梯度记录
+summary(detector, input_data=summary_data, col_names=("input_size", "output_size", "num_params"), row_settings=("depth","var_names"))
+
 recall, recall_mp, mean_recall, mean_recall_mp = val_epoch()  # 开始评估

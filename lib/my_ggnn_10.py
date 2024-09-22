@@ -496,7 +496,7 @@ class GGNN(Module):
                     superto2_index[j] = True
                 scpred_score.data[:, 0] = scpred_cls_score[:, 0]
 
-                pred_cls_logits.type(torch_float32)
+                pred_cls_logits = pred_cls_logits.type(torch_float32)
                 pred_cls_logits[:, doing_index] = F_softmax(pred_cls_logits[:, doing_index], dim=1).type(torch_float32)
                 pred_cls_logits[:, wear_index] = F_softmax(pred_cls_logits[:, wear_index], dim=1).type(torch_float32)
                 pred_cls_logits[:, superon1_index] = F_softmax(pred_cls_logits[:, superon1_index], dim=1).type(torch_float32)
@@ -601,7 +601,7 @@ class GGNN(Module):
                         food_index[j] = True
                     scent_score.data[:, 0] = scent_cls_score[:, 0]
 
-                    ent_cls_logits.type(torch_float32)
+                    ent_cls_logits = ent_cls_logits.type(torch_float32)
                     ent_cls_logits[:, part_index] = F_softmax(ent_cls_logits[:, part_index], dim=1).type(torch_float32)
                     ent_cls_logits[:, artifact_index] = F_softmax(ent_cls_logits[:, artifact_index], dim=1).type(torch_float32)
                     ent_cls_logits[:, person_index] = F_softmax(ent_cls_logits[:, person_index], dim=1).type(torch_float32)
