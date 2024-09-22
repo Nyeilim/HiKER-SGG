@@ -26,7 +26,8 @@ exp_name = 'hikersgg_predcls_test'
 write = tqdm.write  # 函数引用赋值，用来打印日志
 use_bpl = True # 启用还是关闭 BPL 方法
 use_sa = False # 启用还是关闭 SA 方法
-test_epoch = load_best_matrices()['best_mr_epoch'] # 需要测试第几个 epoch 训练出来的模型
+# test_epoch = load_best_matrices()['best_mr_epoch'] # 需要测试第几个 epoch 训练出来的模型
+test_epoch = 2
 print(f"Start test epoch {test_epoch}")
 
 # Change ckpt path for the evaluated model
@@ -142,8 +143,10 @@ def val_epoch():
 ckpt = torch.load(conf.ckpt)    # 加载参数文件
 optimistic_restore(detector, ckpt['state_dict'], skip_clean=False)  # 参数导入模型中
 detector.cuda() # 模型移至 CUDA
-print(print_para(detector), flush=True) # 打印模型参数
-summary(detector) # 使用 torchinfo 打印模型信息
-print(detector)
+# print(print_para(detector), flush=True) # 打印模型参数
+# print(detector) # 原生方法打印模型结构
+one_sample = next(iter(val_loader))
+one_sample.scatter()
+summary(detector, input_data= [*one_sample[0]]) # 使用 torchinfo 打印模型信息
 detector.eval() # 评估模式，禁用梯度记录
 recall, recall_mp, mean_recall, mean_recall_mp = val_epoch()  # 开始评估
