@@ -242,7 +242,7 @@ class KERN(Module):
             prob dists, boxes, img inds, maxscores, classes
 
         """
-        # 前向传播先过个物体检测器
+        # 前向传播先过个物体检测器, x.shape(1,3,592,592)
         result = self.detector(x, im_sizes, image_offset, gt_boxes, gt_classes, gt_rels, proposals,
                                train_anchor_inds, return_fmap=True)
         if result.is_none():
@@ -359,7 +359,7 @@ class KERN(Module):
         """ Hack to do multi-GPU training"""
         batch.scatter()
         if self.num_gpus == 1:
-            return self(*batch[0])
+            return self(*batch[0])  # 调用 @Callable:forward 方法
 
         replicas = replicate(self, devices=self.devices)
         outputs = parallel_apply(replicas, [batch[i] for i in range(self.num_gpus)])

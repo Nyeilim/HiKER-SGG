@@ -6,6 +6,7 @@ import torch
 from torch import no_grad as torch_no_grad
 from torch.cuda.amp import autocast
 from tqdm import tqdm
+from torchsummary import summary
 
 sys.path.append("/output/HiKER-SGG/")
 
@@ -93,7 +94,7 @@ detector = KERN(classes=train.ind_to_classes, rel_classes=train.ind_to_predicate
 
 def val_batch(batch_num, b, evaluator, evaluator_multiple_preds, evaluator_list, evaluator_multiple_preds_list):
     with autocast():
-        det_res = detector[b]
+        det_res = detector[b]   # 这个就是模型的入口，Blob 类型，调用 KERN __getitem__ 方法进行 batch 分发
     if conf.num_gpus == 1:
         det_res = [det_res]
 
@@ -128,7 +129,7 @@ def val_epoch():
     evaluator = BasicSceneGraphEvaluator.all_modes() # for calculating recall
     evaluator_multiple_preds = BasicSceneGraphEvaluator.all_modes(multiple_preds=True)
 
-    prog_bar = tqdm(enumerate(val_loader), total=int(len(val)/val_loader.batch_size), verbos=False) # 关闭进度条
+    prog_bar = tqdm(enumerate(val_loader), total=int(len(val)/val_loader.batch_size), verbose=False) # 关闭进度条
 
     with torch_no_grad():
         for val_b, batch in prog_bar:
@@ -147,5 +148,6 @@ ckpt = torch.load(conf.ckpt)    # 加载参数文件
 optimistic_restore(detector, ckpt['state_dict'], skip_clean=False)  # 参数导入模型中
 detector.cuda() # 模型移至 CUDA
 print(print_para(detector), flush=True) # 打印模型参数
+summary(detector, input_size=(3, 224, 224)) # 使用 torchsummary 打印模型信息
 detector.eval() # 评估模式，禁用梯度记录
 recall, recall_mp, mean_recall, mean_recall_mp = val_epoch()  # 开始评估
