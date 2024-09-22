@@ -69,11 +69,6 @@ ind_to_predicates = train.ind_to_predicates # ind_to_predicates[0] means no rela
 # Here we let val = test since we want to call val_epoch() for evaluation
 if conf.test or conf.test_n:
     val = test  # 为了复用 val_epoch 方法，将 test 数据集赋值给 val
-_, train_loader = VGDataLoader.splits(train, train, mode='rel',
-                                               batch_size=conf.batch_size,
-                                               num_workers=conf.num_workers,
-                                               num_gpus=conf.num_gpus,
-                                               pin_memory=True)
 _, val_loader = VGDataLoader.splits(train, val, mode='rel',
                                                batch_size=conf.batch_size,
                                                num_workers=conf.num_workers,
@@ -148,12 +143,8 @@ ckpt = torch.load(conf.ckpt)    # 加载参数文件
 optimistic_restore(detector, ckpt['state_dict'], skip_clean=False)  # 参数导入模型中
 detector.cuda() # 模型移至 CUDA
 print(print_para(detector), flush=True) # 打印模型参数
-summary(detector,
-        input_data = [torch.randn(size=(1, 3, 592, 592)),
-                      torch.tensor([[444,592,1.184]]),
-                      0,
-                      torch.rand(size=(9,4)),
-                      torch.randint(low=0, high=50, size=(9,2)),
-                      torch.randint(low=0, high=50, size=(5,4))]) # 使用 torchinfo 打印模型信息
+one_sample = next(iter(val_loader))
+one_sample.scatter()
+summary(detector, input_data= [*one_sample[0]]) # 使用 torchinfo 打印模型信息
 detector.eval() # 评估模式，禁用梯度记录
 recall, recall_mp, mean_recall, mean_recall_mp = val_epoch()  # 开始评估
