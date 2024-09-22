@@ -129,10 +129,12 @@ class LayerInfo:
                 size[batch_dim] = 1
 
         else:
-            raise TypeError(
-                "Model contains a layer with an unsupported input or output type: "
-                f"{inputs}, type: {type(inputs)}"
-            )
+            # raise TypeError(
+            #     "Model contains a layer with an unsupported input or output type: "
+            #     f"{inputs}, type: {type(inputs)}"
+            # )
+            size = [0]
+            elem_bytes = 1
 
         return size, elem_bytes
 
