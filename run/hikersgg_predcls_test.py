@@ -147,7 +147,8 @@ detector.cuda() # 模型移至 CUDA
 # print(detector) # 原生方法打印模型结构
 one_sample = next(iter(val_loader))
 one_sample.scatter()
-summary(detector, input_data= [*one_sample[0]].pop(), col_names=("input_size", "output_size", "num_params"),
+summary_data = [*one_sample[0]][:-1]
+summary(detector, input_data=summary_data, col_names=("input_size", "output_size", "num_params"),
         row_settings=("depth","var_names"), verbose=2) # 使用 torchinfo 打印模型信息
 detector.eval() # 评估模式，禁用梯度记录
 recall, recall_mp, mean_recall, mean_recall_mp = val_epoch()  # 开始评估
