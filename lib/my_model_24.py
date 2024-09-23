@@ -225,14 +225,15 @@ class KERN(Module):
                 return_fmap=False):
         """
         Forward pass for detection
-        :param x: Images@[batch_size, 3, IM_SIZE, IM_SIZE]
-        :param im_sizes: A numpy array of (h, w, scale) for each image.
-        :param image_offset: Offset onto what image we're on for MGPU training (if single GPU this is 0)
-        :param gt_boxes:
+        :param x: Images@[batch_size, 3, IM_SIZE, IM_SIZE]. shape(1,3,592,592)  正负小数
+        :param im_sizes: A numpy array of (h, w, scale) for each image. shape(1,3) [[444. 592. 1.184]]
+        :param image_offset: Offset onto what image we're on for MGPU training (if single GPU this is 0). 0
+        :param gt_boxes: look below
 
         Training parameters:
-        :param gt_boxes: [num_gt, 4] GT boxes over the batch.
-        :param gt_classes: [num_gt, 2] gt boxes where each one is (img_id, class)
+        :param gt_boxes: [num_gt, 4] GT boxes over the batch. shape([9,4]) 正小数
+        :param gt_classes: [num_gt, 2] gt boxes where each one is (img_id, class). shape([9,2]) 正整数
+        :param gt_classes: shape([5,4]) 正整数
         :param train_anchor_inds: a [num_train, 2] array of indices for the anchors that will
                                   be used to compute the training loss. Each (img_ind, fpn_idx)
         :return: If train:
@@ -359,7 +360,7 @@ class KERN(Module):
         """ Hack to do multi-GPU training"""
         batch.scatter()
         if self.num_gpus == 1:
-            return self(*batch[0])
+            return self(*batch[0])  # 调用 @Callable:forward 方法
 
         replicas = replicate(self, devices=self.devices)
         outputs = parallel_apply(replicas, [batch[i] for i in range(self.num_gpus)])

@@ -1,13 +1,15 @@
-import numpy as np
 import os
+import sys
+
+import numpy as np
 import torch
 from apex import amp
-import sys
 
 sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
 
 from lib.exp.conf_matrix_fn import train_evaluate
 from lib.exp.global_var import detector, write, conf
+from lib.exp.exp_util import save_best_matrices
 from lib.exp.optim_fn import get_optim
 from lib.exp.train_fn import train_epoch
 from lib.exp.val_fn import val_epoch
@@ -20,8 +22,10 @@ optimizer = get_optim(conf.lr * conf.num_gpus * conf.batch_size)
 detector, optimizer = amp.initialize(detector, optimizer, opt_level="O0")
 
 conf_matrix_list = []
+matrices_list = []  # 收集每个 epoch mean Recall 数据
+nc_matrices_list = [] # 收集每个 epoch no constraint mean Recall 数据
 for epoch in range(start_epoch, end_epoch):
-    if (epoch + 1) % 3 == 0:
+    if (epoch + 1) % 3 == 0:    # 每三轮重新计算一次混淆矩阵，后面的数字为 2,5,8,11
         print('Evaluating new confusion matrix...')
         conf_matrix = train_evaluate()  # 获取新的谓词混淆矩阵(见 3.7)，这个玩意应该是对 curEpoch - 1 轮最终结果的评估
         conf_matrix[0, :] = 0.0
@@ -60,3 +64,7 @@ for epoch in range(start_epoch, end_epoch):
         print(os.path.join(conf.save_dir, '{}-{}.tar'.format('vgrel', epoch)))
 
     recall, recall_mp, mean_recall, mean_recall_mp = val_epoch()  # 开始评估
+    matrices_list.append(mean_recall)
+    nc_matrices_list.append(mean_recall_mp)
+
+save_best_matrices(matrices_list, nc_matrices_list)

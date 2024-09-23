@@ -1,6 +1,6 @@
-import numpy as np
 import os
-import sys
+
+import numpy as np
 import torch
 from tqdm import tqdm
 
@@ -14,7 +14,6 @@ from lib.pytorch_misc import optimistic_restore
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 选择显卡
 codebase = '/output/HiKER-SGG/'  # 项目根目录
-sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
 exp_name = 'hikersgg_predcls_train'
 write = tqdm.write  # 函数引用赋值，用来打印日志
 use_bpl = True # 启用还是关闭 BPL 方法
@@ -24,9 +23,9 @@ use_sa = False # 启用还是关闭 SA 方法
 # vgrel-11 是 GB-Net 提供的预训练模型，HiKER-SGG 的核心部分(GNN)和 GB-Net 非常接近
 conf = ModelConfig(f'''
 -m predcls -p 2500 -clip 5
--tb_log_dir ../data/summaries/kern_predcls/{exp_name}
--save_dir ../data/checkpoints/kern_predcls/{exp_name}
--ckpt ../data/checkpoints/vgdet/vgrel-11.tar
+-tb_log_dir /output/data/summaries/kern_predcls/{exp_name}
+-save_dir /output/data/checkpoints/kern_predcls/{exp_name}
+-ckpt /output/data/checkpoints/vgdet/vgrel-11.tar
 -val_size 5000
 -adam
 -b 8
@@ -71,6 +70,8 @@ train, val, test = VG.splits(num_val_im=conf.val_size, filter_duplicate_rels=Tru
                              get_state=False)
 
 # 这里的两个集合经过 BPL 方法平衡后，会少很多头部谓词样本，在 SGG-G2S 的论文中拿来微调最后的层; return size: 2104, 5000
+# 它的这个 train_loader 的大小其实反应的是 batch_sampler size，说白了就是批次个数，2104 = 16832/8
+# batch_sampler 是一个可迭代的对象，它返回一系列的索引列表（batches），每个列表代表一个批次。batch_sampler 可以自定义如何从数据集中抽取批次。
 train_loader, val_loader = VGDataLoader.splits(train, val, mode='rel',
                                                batch_size=conf.batch_size,
                                                num_workers=conf.num_workers,

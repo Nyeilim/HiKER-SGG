@@ -31,6 +31,12 @@
       "bookmarkType": "LETTER_D"
     },
     {
+      "fileDescriptor": "$/lib/evaluation/sg_eval.py",
+      "linenumber": 17,
+      "name": "导入 Cython 相关库",
+      "bookmarkType": "DIGIT_3"
+    },
+    {
       "fileDescriptor": "$/dataloaders/visual_genome.py",
       "linenumber": 492,
       "name": "BPL: 加载数据集平衡",
