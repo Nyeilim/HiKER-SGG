@@ -66,7 +66,7 @@ class Blob(object):
         :param datom:
         :return:
         """
-        i = len(self.imgs)
+        i = len(self.imgs) # imgs 是已经处理完成的图片 List；所以这里可以理解成，此轮处理的是第几张图片，从 0 开始
         self.imgs.append(d['img'])
 
         h, w, scale = d['img_size']
@@ -74,7 +74,7 @@ class Blob(object):
         # all anchors
         self.im_sizes.append((h, w, scale))
 
-        gt_boxes_ = d['gt_boxes'].astype(np.float32) * d['scale']
+        gt_boxes_ = d['gt_boxes'].astype(np.float32) * d['scale']   # 放缩 bbox 标注，使其和放缩后的图像相匹配
         self.gt_boxes.append(gt_boxes_)
 
         self.gt_classes.append(np.column_stack((

@@ -32,7 +32,8 @@ PROPOSAL_FN = stanford_metadata_path('proposals.h5')
 
 
 MODES = ('sgdet', 'sgcls', 'predcls')
-
+# 数据集中原始的 bbox 坐标使用的是 int 类型标注，它同图片像素点不是一一对应的关系，而是有个最大值 BOX_SCALE
+# 比如对于一个实际宽 592 的图片，它的 x 轴标注是 900，那么我们就可以通过 900*592/1024=520.3 得到这个 x 轴标注在真实图片上的位置
 BOX_SCALE = 1024  # Scale at which we have the boxes
 IM_SCALE = 592    # Our images will be resized to this res without padding
 
