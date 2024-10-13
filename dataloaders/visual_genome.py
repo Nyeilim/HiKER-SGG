@@ -696,7 +696,6 @@ class VGDataLoader(DataLoader):
             # 自定义的 batch 后处理函数，下面这个 lambda 表达式的入参 x 其实就是 batch
             collate_fn=lambda x: vg_collate(x, mode=mode, num_gpus=num_gpus, is_train=True),
             drop_last=True, # 是否丢弃最后一个不完整的批次。
-            pin_memory=True, # 这个需要谨慎，有可能导致内存溢出
             **kwargs,
         )
         val_load = cls(
@@ -706,7 +705,6 @@ class VGDataLoader(DataLoader):
             num_workers=num_workers,
             collate_fn=lambda x: vg_collate(x, mode=mode, num_gpus=num_gpus, is_train=False),
             drop_last=True,
-            pin_memory=True,
             **kwargs,
         )
         return train_load, val_load
