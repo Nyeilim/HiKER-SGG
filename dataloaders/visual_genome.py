@@ -674,7 +674,7 @@ def vg_collate(data, num_gpus=3, is_train=False, mode='det'):
                 batch_size_per_gpu=len(data) // num_gpus)
     for d in data:
         blob.append(d)
-    blob.reduce()
+    blob.reduce() # 将成员变量中的各种 List，不再按照图片索引分组，而是全部堆叠成连续的 Tensor
     return blob
 
 
@@ -690,13 +690,13 @@ class VGDataLoader(DataLoader):
         assert mode in ('det', 'rel')
         train_load = cls(
             dataset=train_data,
-            batch_size=batch_size * num_gpus,
+            batch_size=batch_size * num_gpus, # 所有批次，后面会通过 Blob.scatter() 分发到不同 GPU
             shuffle=True,
             num_workers=num_workers,
-            # 自定义的批处理函数。用于将一批数据项组合成一个批次。
+            # 自定义的 batch 后处理函数，下面这个 lambda 表达式的入参 x 其实就是 batch
             collate_fn=lambda x: vg_collate(x, mode=mode, num_gpus=num_gpus, is_train=True),
             drop_last=True, # 是否丢弃最后一个不完整的批次。
-            # pin_memory=True, # 这个需要谨慎，有可能导致内存溢出
+            pin_memory=True, # 这个需要谨慎，有可能导致内存溢出
             **kwargs,
         )
         val_load = cls(
@@ -706,7 +706,7 @@ class VGDataLoader(DataLoader):
             num_workers=num_workers,
             collate_fn=lambda x: vg_collate(x, mode=mode, num_gpus=num_gpus, is_train=False),
             drop_last=True,
-            # pin_memory=True,
+            pin_memory=True,
             **kwargs,
         )
         return train_load, val_load

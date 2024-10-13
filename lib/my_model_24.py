@@ -360,10 +360,10 @@ class KERN(Module):
         """ Hack to do multi-GPU training"""
         batch.scatter()
         if self.num_gpus == 1:
-            return self(*batch[0])  # 调用 @Callable:forward 方法
+            return self(*batch[0])  # 调用 @Callable:forward 方法, Blob.__getitem__ 中对 0 索引有特殊的逻辑
 
-        replicas = replicate(self, devices=self.devices)
-        outputs = parallel_apply(replicas, [batch[i] for i in range(self.num_gpus)])
+        replicas = replicate(self, devices=self.devices) # 复制模型对象到不同 GPU
+        outputs = parallel_apply(replicas, [batch[i] for i in range(self.num_gpus)]) # 在各个模型对象上进行前向传播
         if self.training:
             return gather_res(outputs, 0, dim=0)
         return outputs
