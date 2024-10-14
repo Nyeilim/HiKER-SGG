@@ -23,7 +23,7 @@ def anchor_target_layer(gt_boxes, im_size,
     labels and bounding-box regression targets.
 
     for each (H, W) location i
-      generate 3 anchor boxes centered on cell i
+      generate 3 anchor boxes centered on cell i # 扯淡，明明是对于某个点有 20 = len(ANCHOR_SCALES) x len(ANCHOR_RATIOS) 种锚框
     filter out-of-image anchors
     measure GT overlap
 

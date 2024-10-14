@@ -159,7 +159,7 @@ class KERN(Module):
         # 物体检测器在构造函数中获取
         self.detector = ObjectDetector(
             classes=classes,
-            mode=('proposals' if use_proposals else 'refinerels') if mode == 'sgdet' else 'gtbox',
+            mode=('proposals' if use_proposals else 'refinerels') if mode == 'sgdet' else 'gtbox',  # 一般都是 gtbox
             use_resnet=use_resnet,
             thresh=thresh,
             max_per_img=64
@@ -233,7 +233,7 @@ class KERN(Module):
         Training parameters:
         :param gt_boxes: [num_gt, 4] GT boxes over the batch. shape([9,4]) 正小数
         :param gt_classes: [num_gt, 2] gt boxes where each one is (img_id, class). shape([9,2]) 正整数
-        :param gt_classes: shape([5,4]) 正整数
+        :param gt_rels: shape([5,4]) 正整数
         :param train_anchor_inds: a [num_train, 2] array of indices for the anchors that will
                                   be used to compute the training loss. Each (img_ind, fpn_idx)
         :return: If train:
@@ -360,10 +360,10 @@ class KERN(Module):
         """ Hack to do multi-GPU training"""
         batch.scatter()
         if self.num_gpus == 1:
-            return self(*batch[0])  # 调用 @Callable:forward 方法
+            return self(*batch[0])  # 调用 @Callable:forward 方法, Blob.__getitem__ 中对 0 索引有特殊的逻辑
 
-        replicas = replicate(self, devices=self.devices)
-        outputs = parallel_apply(replicas, [batch[i] for i in range(self.num_gpus)])
+        replicas = replicate(self, devices=self.devices) # 复制模型对象到不同 GPU
+        outputs = parallel_apply(replicas, [batch[i] for i in range(self.num_gpus)]) # 在各个模型对象上进行前向传播
         if self.training:
             return gather_res(outputs, 0, dim=0)
         return outputs

@@ -80,7 +80,7 @@ class VG(Dataset):
         )
 
         self.filenames = load_image_filenames(image_file)
-        self.filenames = [self.filenames[i] for i in np_where(self.split_mask)[0]]  # 把“取出图片”的名字挑出来
+        self.filenames = [self.filenames[i] for i in np_where(self.split_mask)[0]]  # 把“可用图片”的名字挑出来
 
         if use_proposals:
             print("Loading proposals", flush=True)
@@ -310,11 +310,11 @@ class VG(Dataset):
         entry = {
             'img': self.transform_pipeline(image_unpadded), # 放缩后的图像
             'img_size': im_size,    # 放缩后尺寸及放缩比例
-            'gt_boxes': gt_boxes,   # bbox
-            'gt_classes': self.gt_classes[index].copy(),    # s,o 索引标注
-            'gt_relations': gt_rels,    # 关系（三元组）
-            'scale': IM_SCALE / BOX_SCALE,  # Multiply the boxes by this.
-            'index': index, # 索引下标
+            'gt_boxes': gt_boxes,   # 未放缩的 gt_box 坐标，shape(num_box, 4)
+            'gt_classes': self.gt_classes[index].copy(),    # s,o 索引标注，shape(num_box,)
+            'gt_relations': gt_rels,    # 关系（三元组），shape(num_rels, 3)
+            'scale': IM_SCALE / BOX_SCALE,  # gt_box 放缩比例，具体的放缩逻辑在 Blob 中
+            'index': index, # 索引下标，第几张可用图片
             'flipped': flipped, # 翻转标记
             'fn': fname,    # 文件名
         }
@@ -422,7 +422,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
             split_mask &= roi_h5['img_to_first_rel'][:] >= 0 # 没有 rel 的图片，这项会被标记为 -1
 
         image_index = np_where(split_mask)[0] # 拿到筛选完毕的图片对应下标；np_where 的返回值类似 ([],)；因此我们要拿到元组内的数组
-        # 根据设置再决定取多少张图片，把取出图片的下标拿到
+        # 根据设置再决定取多少张图片，把可用图片的下标拿到
         if num_im > -1:
             image_index = image_index[:num_im]
         if num_val_im > 0:
@@ -431,7 +431,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
             elif mode == 'train':
                 image_index = image_index[num_val_im:]
 
-        # 重新初始化 mask 标记，然后把取出图片的下标对应的元素标记成 True
+        # 重新初始化 mask 标记，然后把可用图片的下标对应的元素标记成 True
         split_mask = np_zeros_like(data_split, dtype=bool)
         split_mask[image_index] = True
 
@@ -450,8 +450,8 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
         # 前面说到属于某张图片的 bbox, rel 会被排列在连续的索引中，这里的 first, last 其实就是来框定这个索引区间（左右闭合）的
         # 比如 roi_h5['img_to_first_box'][1] = 15, roi_h5['img_to_last_box'][1] = 21
         # 那我们就可以知道索引为 1 的图片，它的 bbox 是 all_boxes[15:21+1, :]；rel 同理
-        # 至于 split_mask 其实就是我们的“取出图片”，它这里使用的是 numpy 的高级索引语法
-        # 把与“取出图片”相关的信息收集起来，然后放到单独的 List 中，顺序第0张【而不是索引为0】“取出图片”的对应信息会放到 List[0]
+        # 至于 split_mask 其实就是我们的“可用图片”，它这里使用的是 numpy 的高级索引语法
+        # 把与“可用图片”相关的信息收集起来，然后放到单独的 List 中，顺序第0张【而不是索引为0】“可用图片”的对应信息会放到 List[0]
         im_to_first_box = roi_h5['img_to_first_box'][split_mask]
         im_to_last_box = roi_h5['img_to_last_box'][split_mask]
         im_to_first_rel = roi_h5['img_to_first_rel'][split_mask]
@@ -502,7 +502,8 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
     root_classes_count = {}
     leaf_classes_count = {}
     all_classes_count = {}
-    # image_index 的元素内容是“取出图片”的索引【但是用不上】，索引是“取出图片”的顺序号
+    # image_index 的元素内容是“可用图片”的索引【但是用不上】，索引 i 是“可用图片”的顺序号
+    # 如 image_index[0] = 6526，表面第 0 张可用图片是数据集中的第 6526 张图片
     for i in range(len(image_index)):
         # 取出单张图片的信息区间
         i_obj_start = im_to_first_box[i]
@@ -673,7 +674,7 @@ def vg_collate(data, num_gpus=3, is_train=False, mode='det'):
                 batch_size_per_gpu=len(data) // num_gpus)
     for d in data:
         blob.append(d)
-    blob.reduce()
+    blob.reduce() # 将成员变量中的各种 List，不再按照图片索引分组，而是全部堆叠成连续的 Tensor
     return blob
 
 
@@ -689,13 +690,12 @@ class VGDataLoader(DataLoader):
         assert mode in ('det', 'rel')
         train_load = cls(
             dataset=train_data,
-            batch_size=batch_size * num_gpus,
+            batch_size=batch_size * num_gpus, # 所有批次，后面会通过 Blob.scatter() 分发到不同 GPU
             shuffle=True,
             num_workers=num_workers,
-            # 自定义的批处理函数。用于将一批数据项组合成一个批次。
+            # 自定义的 batch 后处理函数，下面这个 lambda 表达式的入参 x 其实就是 batch
             collate_fn=lambda x: vg_collate(x, mode=mode, num_gpus=num_gpus, is_train=True),
             drop_last=True, # 是否丢弃最后一个不完整的批次。
-            # pin_memory=True, # 这个需要谨慎，有可能导致内存溢出
             **kwargs,
         )
         val_load = cls(
@@ -705,7 +705,6 @@ class VGDataLoader(DataLoader):
             num_workers=num_workers,
             collate_fn=lambda x: vg_collate(x, mode=mode, num_gpus=num_gpus, is_train=False),
             drop_last=True,
-            # pin_memory=True,
             **kwargs,
         )
         return train_load, val_load

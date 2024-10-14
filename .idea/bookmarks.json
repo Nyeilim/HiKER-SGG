@@ -13,6 +13,18 @@
       "bookmarkType": "LETTER_Z"
     },
     {
+      "fileDescriptor": "$/dataloaders/visual_genome.py",
+      "linenumber": 676,
+      "name": "blob.reduce",
+      "bookmarkType": "LETTER_G"
+    },
+    {
+      "fileDescriptor": "$/dataloaders/blob.py",
+      "linenumber": 93,
+      "name": "锚框预处理",
+      "bookmarkType": "LETTER_H"
+    },
+    {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
       "linenumber": 39,
       "name": "BPL\u0026SA: 外部变量赋值给成员变量",
@@ -37,6 +49,12 @@
       "bookmarkType": "DIGIT_3"
     },
     {
+      "fileDescriptor": "$/lib/my_model_24.py",
+      "linenumber": 360,
+      "name": "blob.scatter",
+      "bookmarkType": "LETTER_F"
+    },
+    {
       "fileDescriptor": "$/dataloaders/visual_genome.py",
       "linenumber": 492,
       "name": "BPL: 加载数据集平衡",
@@ -47,6 +65,12 @@
       "linenumber": 255,
       "name": "BPL\u0026SA: 成员变量赋值给局部变量",
       "bookmarkType": "LETTER_B"
+    },
+    {
+      "fileDescriptor": "$/lib/exp/train_fn.py",
+      "linenumber": 65,
+      "name": "训练时前向传播的入口",
+      "bookmarkType": "LETTER_E"
     }
   ]
 }

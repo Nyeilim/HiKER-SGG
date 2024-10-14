@@ -17,7 +17,7 @@ class Blob(object):
         assert mode in ('det', 'rel')
         assert num_gpus >= 1
         self.mode = mode
-        self.is_train = is_train
+        self.is_train = is_train # blob 对于训练集和验证集的处理是会有很大不同的
         self.num_gpus = num_gpus
         self.batch_size_per_gpu = batch_size_per_gpu
         self.primary_gpu = primary_gpu
@@ -66,7 +66,7 @@ class Blob(object):
         :param datom:
         :return:
         """
-        i = len(self.imgs)
+        i = len(self.imgs) # imgs 是已经处理完成的图片 List；所以这里可以理解成，此轮处理的是第几张图片，从 0 开始
         self.imgs.append(d['img'])
 
         h, w, scale = d['img_size']
@@ -74,7 +74,7 @@ class Blob(object):
         # all anchors
         self.im_sizes.append((h, w, scale))
 
-        gt_boxes_ = d['gt_boxes'].astype(np.float32) * d['scale']
+        gt_boxes_ = d['gt_boxes'].astype(np.float32) * d['scale']   # 放缩 bbox 标注，使其和放缩后的图像相匹配
         self.gt_boxes.append(gt_boxes_)
 
         self.gt_classes.append(np.column_stack((
@@ -91,7 +91,7 @@ class Blob(object):
         # Augment with anchor targets
         if self.is_train:
             train_anchors_, train_anchor_inds_, train_anchor_targets_, train_anchor_labels_ = \
-                anchor_target_layer(gt_boxes_, (h, w))
+                anchor_target_layer(gt_boxes_, (h, w)) # 锚框预处理生成伪标签，返回筛选后的锚框、索引、边界框回归目标及标签
 
             self.train_anchors.append(np.hstack((train_anchors_, train_anchor_targets_)))
 
@@ -113,10 +113,10 @@ class Blob(object):
         :param datom: List of lists of numpy arrays that will be concatenated.
         :return:
         """
-        chunk_sizes = [0] * self.num_gpus
+        chunk_sizes = [0] * self.num_gpus # 用于记录每个 GPU 被分配到的 chunk 大小
         for i in range(self.num_gpus):
             for j in range(self.batch_size_per_gpu):
-                chunk_sizes[i] += datom[i * self.batch_size_per_gpu + j].shape[0]
+                chunk_sizes[i] += datom[i * self.batch_size_per_gpu + j].shape[0] # 这里拿到是 ndarray
         return tensor(np.concatenate(datom, 0)).requires_grad_(not self.volatile and tensor is not torch.LongTensor), chunk_sizes
 
     def reduce(self):
@@ -126,12 +126,12 @@ class Blob(object):
                 len(self.imgs), self.batch_size_per_gpu, self.num_gpus
             ))
 
-        self.imgs = torch.stack(self.imgs, 0).requires_grad_(not self.volatile)
+        self.imgs = torch.stack(self.imgs, 0).requires_grad_(not self.volatile) # list -> tensor
         self.im_sizes = np.stack(self.im_sizes).reshape(
-            (self.num_gpus, self.batch_size_per_gpu, 3))
+            (self.num_gpus, self.batch_size_per_gpu, 3)) # shape(batch_size,3) -> shape(num_gpu, batch_size_per_gpu, 3)
 
         if self.is_rel:
-            self.gt_rels, self.gt_rel_chunks = self._chunkize(self.gt_rels)
+            self.gt_rels, self.gt_rel_chunks = self._chunkize(self.gt_rels) # shape(10,4)
 
         self.gt_boxes, self.gt_box_chunks = self._chunkize(self.gt_boxes, tensor=torch.FloatTensor)
         self.gt_classes, _ = self._chunkize(self.gt_classes)
@@ -149,8 +149,8 @@ class Blob(object):
         """ Helper function"""
         if self.num_gpus == 1:
             return x.cuda(self.primary_gpu, non_blocking=True)
-        return torch.nn.parallel.scatter_gather.Scatter.apply(
-            list(range(self.num_gpus)), chunk_sizes, dim, x)
+        # 调用 Pytorch Scatter 来将数据分发到多个 GPU 上
+        return torch.nn.parallel.scatter_gather.Scatter.apply(list(range(self.num_gpus)), chunk_sizes, dim, x)
 
     def scatter(self):
         """ Assigns everything to the GPUs"""
@@ -192,7 +192,7 @@ class Blob(object):
         if index not in list(range(self.num_gpus)):
             raise ValueError("Out of bounds with index {} and {} gpus".format(index, self.num_gpus))
 
-        if self.is_rel:
+        if self.is_rel: # Default is true
             rels = self.gt_rels
             if index > 0 or self.num_gpus != 1:
                 rels_i = rels[index] if self.is_rel else None
@@ -208,7 +208,7 @@ class Blob(object):
             proposals = None
         else:
             proposals = self.proposals
-
+        # 单 GPU 的特殊逻辑
         if index == 0 and self.num_gpus == 1:
             image_offset = 0
             if self.is_train:

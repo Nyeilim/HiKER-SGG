@@ -79,7 +79,7 @@ class ObjectDetector(nn.Module):
         self.thresh = thresh
 
         if not self.use_resnet:
-            vgg_model = load_vgg()
+            vgg_model = load_vgg() # 使用 Pytorch VGG16 作为骨干网络
             self.features = vgg_model.features
             self.roi_fmap = vgg_model.classifier
             rpn_input_dim = 512
