@@ -30,7 +30,7 @@ CURRENT_DEVICE = current_device()
 class GGNNRelReason(Module):
     """
     Module for relationship classification.
-    场景图生成本质上是谓词分类任务
+    场景图生成本质上是谓词分类任务。之前写的，其实不太对。场景图生成多了个检测 <s,p> 对的步骤
     """
     def __init__(self, graph_path, emb_path, mode='sgdet', num_obj_cls=151, num_rel_cls=51, obj_dim=4096,
                  rel_dim=4096,time_step_num=3, hidden_dim=512, output_dim=512,
@@ -63,13 +63,11 @@ class GGNNRelReason(Module):
     # 这个 forward 方法是 Module 抽象类里面待实现的 Callable 方法
     def forward(self, im_inds, obj_fmaps, obj_logits, rel_inds, vr, obj_labels=None, boxes_per_cls=None):
         """
-        Reason relationship classes using knowledge of object and relationship coccurrence.
+        Reason relationship classes using knowledge of object and relationship co-currency.
+        入参的 obj_logits 就是前面的 obj_dist
         """
 
-        # print(rel_inds.shape)
-        # (num_rel, 3)
         if self.mode == 'predcls':
-            #breakpoint()
             obj_logits = onehot_logits(obj_labels.data, self.num_obj_cls).clone().detach()
         obj_probs = F_softmax(obj_logits, 1)
 
@@ -117,8 +115,6 @@ class GGNNRelReason(Module):
             obj_preds = torch_tensor(nms_mask * obj_probs.data, requires_grad=False, device=CURRENT_DEVICE, dtype=torch_float32)[:,1:].max(1)[1] + 1
         else:
             obj_preds = obj_labels if obj_labels is not None else obj_probs[:,1:].max(1)[1] + 1
-            
-        # print(rel_logits.shape, scpred.shape)
 
         return obj_logits, obj_preds, rel_logits, scpred_softmax, scent_softmax
 
@@ -227,7 +223,7 @@ class KERN(Module):
         Forward pass for detection
         :param x: Images@[batch_size, 3, IM_SIZE, IM_SIZE]. shape(1,3,592,592)  正负小数
         :param im_sizes: A numpy array of (h, w, scale) for each image. shape(1,3) [[444. 592. 1.184]]
-        :param image_offset: Offset onto what image we're on for MGPU training (if single GPU this is 0). 0
+        :param image_offset: Offset onto what image we're on for MGPU training (if single GPU this is 0). 因为我们都是单 GPU，这个默认当 0
         :param gt_boxes: look below
 
         Training parameters:
@@ -252,20 +248,19 @@ class KERN(Module):
         im_inds = result.im_inds - image_offset
         boxes = result.rm_box_priors
 
-        if self.training and result.rel_labels is None:
+        if self.training and result.rel_labels is None: # 这个条件语句不执行
             assert self.mode == 'sgdet'
             result.rel_labels = rel_assignments(im_inds.data, boxes.data, result.rm_obj_labels.data,
                                                 gt_boxes.data, gt_classes.data, gt_rels.data,
                                                 image_offset, filter_non_overlap=True,
                                                 num_sample_per_gt=1)
 
-        rel_inds = self.get_rel_inds(result.rel_labels, im_inds, boxes)
-        rois = torch_cat((im_inds[:, None].float(), boxes), 1)
+        rel_inds = self.get_rel_inds(result.rel_labels, im_inds, boxes) # 取 rel_labels[:,:3]，每项即 [im_ind, subject, object]
+        rois = torch_cat((im_inds[:, None].float(), boxes), 1) # [:, None] 将 im_inds 从一维张量变为二维张量，把图片索引拼到 gt_boxes 前面去
 
-        result.obj_fmap = self.obj_feature_map(result.fmap.detach(), rois)
+        result.obj_fmap = self.obj_feature_map(result.fmap.detach(), rois) # 这个过 ROI Align 的操作在 Detector 里面就有，这里用 detach 禁用反向传播重做遍，目的是什么？
 
         vr = self.visual_rep(result.fmap.detach(), rois, rel_inds[:, 1:])
-        # print(vr.shape)
 
         # 调用 GGNN 进行预测，通过实例名调用 Callable 方法，也就是 forward 方法
         (result.rm_obj_dists, result.obj_preds, result.rel_dists,
@@ -276,7 +271,7 @@ class KERN(Module):
             vr=vr,
             rel_inds=rel_inds,
             obj_labels=result.rm_obj_labels if self.training or self.mode == 'predcls' else None,
-            boxes_per_cls=result.boxes_all
+            boxes_per_cls=result.boxes_all # None
         )
 
         if self.training:
@@ -344,7 +339,7 @@ class KERN(Module):
 
     def obj_feature_map(self, features, rois):
         """
-        Gets the ROI features
+        Gets the ROI features. 这个方法在 object_detector.py 中有个同样的
         :param features: [batch_size, dim, IM_SIZE/4, IM_SIZE/4] (features at level p2)
         :param rois: [num_rois, 5] array of [img_num, x0, y0, x1, y1].
         :return: [num_rois, #dim] array

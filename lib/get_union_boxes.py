@@ -29,7 +29,7 @@ class UnionBoxesAndFeats(Module):
         self.use_feats = use_feats
 
         self.conv = nn.Sequential(
-            nn.Conv2d(2, dim //2, kernel_size=7, stride=2, padding=3, bias=True),
+            nn.Conv2d(2, dim //2, kernel_size=7, stride=2, padding=3, bias=True), # 实际上调用时 dim = 512
             nn.ReLU(inplace=True),
             nn.BatchNorm2d(dim//2, momentum=BATCHNORM_MOMENTUM),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
@@ -41,14 +41,14 @@ class UnionBoxesAndFeats(Module):
 
     def forward(self, fmap, rois, union_inds):
         union_pools = union_boxes(fmap, rois, union_inds, pooling_size=self.pooling_size, stride=self.stride)
-        if not self.use_feats:
+        if not self.use_feats: # True
             return union_pools.detach()
-
+        # 提取 subject, object 对应的 gt_boxes，然后拼接起来，shape(num_all_rels, 8)
         pair_rois = torch.cat((rois[:, 1:][union_inds[:, 0]], rois[:, 1:][union_inds[:, 1]]),1).data.cpu().numpy()
-        rects_np = draw_union_boxes(pair_rois, self.pooling_size*4-1) - 0.5
+        rects_np = draw_union_boxes(pair_rois, self.pooling_size*4-1) - 0.5 # shape(num_all_rels, 2, 27, 27)
         rects = Variable(torch.FloatTensor(rects_np).cuda(fmap.get_device()))
         with torch.no_grad():
-            if self.concat:
+            if self.concat: # False
                 return torch.cat((union_pools, self.conv(rects)), 1)
             return union_pools + self.conv(rects)
 
@@ -79,13 +79,13 @@ def union_boxes(fmap, rois, union_inds, pooling_size=14, stride=16):
     :return:
     """
     assert union_inds.size(1) == 2
-    im_inds = rois[:,0][union_inds[:,0]]
+    im_inds = rois[:,0][union_inds[:,0]] # 这什么垃圾写法啊？这个是数组索引方法。最后拿到的是 subject 所在图片的 im_ind
     assert (im_inds.data == rois.data[:,0][union_inds[:,1]]).sum() == union_inds.size(0)
     union_rois = torch.cat((
-        im_inds[:,None],
-        torch.min(rois[:, 1:3][union_inds[:, 0]], rois[:, 1:3][union_inds[:, 1]]),
-        torch.max(rois[:, 3:5][union_inds[:, 0]], rois[:, 3:5][union_inds[:, 1]]),
-    ),1)
+        im_inds[:,None], # shape(num_all_rels,) -> shape(num_all_rels, 1)
+        torch.min(rois[:, 1:3][union_inds[:, 0]], rois[:, 1:3][union_inds[:, 1]]), # 取 subject, object 两者左上方的最小值，即 (1,3) (2,1) 会取到 (1,1)，shape(num_all_rels, 2)
+        torch.max(rois[:, 3:5][union_inds[:, 0]], rois[:, 3:5][union_inds[:, 1]]), # 意思同上，不过是取右下方的最大值，shape(num_all_rels, 2)
+    ),1) # 最后拼接到的 shape(num_all_rels, 5)
 
     # (num_rois, d, pooling_size, pooling_size)
     union_pools = roi_align(fmap, union_rois, [pooling_size, pooling_size], spatial_scale=1/stride)

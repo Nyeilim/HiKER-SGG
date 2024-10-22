@@ -79,7 +79,7 @@ class ObjectDetector(nn.Module):
         self.thresh = thresh
 
         if not self.use_resnet:
-            vgg_model = load_vgg() # 使用 Pytorch VGG16 作为骨干网络
+            vgg_model = load_vgg() # 使用 Pytorch VGG16 作为骨干网络，classifier 去掉最后的分类头
             self.features = vgg_model.features
             self.roi_fmap = vgg_model.classifier
             rpn_input_dim = 512
@@ -132,12 +132,12 @@ class ObjectDetector(nn.Module):
     def obj_feature_map(self, features, rois):
         """
         Gets the ROI features
-        :param features: [batch_size, dim, IM_SIZE/4, IM_SIZE/4] (features at level p2)
+        :param features: [batch_size, dim, IM_SIZE/4, IM_SIZE/4] (features at level p2) 实际上为 (batch_size, 512, 37, 37)
         :param rois: [num_rois, 5] array of [img_num, x0, y0, x1, y1].
         :return: [num_rois, #dim] array
         """
         feature_pool = roi_align(self.compress(features) if self.use_resnet else features,
-                                 rois, output_size=[self.pooling_size, self.pooling_size], spatial_scale=1/16)
+                                 rois, output_size=[self.pooling_size, self.pooling_size], spatial_scale=1/16) # ROI Pooling 层，shape(num_gt_boxes,512,7,7)，1/16 的来源是 37/592
         # feature_pool = RoIAlignFunction(self.pooling_size, self.pooling_size, spatial_scale=1 / 16)(
         #     self.compress(features) if self.use_resnet else features, rois)
         # print('object_detector.ObjectDetector.obj_feature_map: feature_pool.size() =', feature_pool.size(), 'self.pooling_size =', self.pooling_size, 'features.size() =', features.size(), 'rois.size() =', rois.size())
@@ -219,11 +219,11 @@ class ObjectDetector(nn.Module):
         """
         assert gt_boxes is not None
         im_inds = gt_classes[:, 0] - image_offset
-        rois = torch.cat((im_inds.float()[:, None], gt_boxes), 1)
+        rois = torch.cat((im_inds.float()[:, None], gt_boxes), 1) # 使用 [im_inds, gt_box] 当作 rois
         if gt_rels is not None and self.training:
             rois, labels, rel_labels = proposal_assignments_gtbox(
                 rois.data, gt_boxes.data, gt_classes.data, gt_rels.data, image_offset,
-                fg_thresh=0.5)
+                fg_thresh=0.5) # 以 gt_box 设置 rois 的回归目标和标签
         else:
             labels = gt_classes[:, 1]
             rel_labels = None
@@ -297,22 +297,22 @@ class ObjectDetector(nn.Module):
         :return: If train:
         """
         fmap = self.feature_map(x)
-        #import pdb; pdb.set_trace()
-        # Get boxes from RPN
+        # import pdb; pdb.set_trace()
+        # Get boxes from RPN. 由于我们设置 mode:gtbox，因此这里会直接把 gt_boxes 当作我们的 roi，实际上并没有过 RPN 层；rois.shape(num_gt_boxes, 5)
         rois, obj_labels, bbox_targets, rpn_scores, rpn_box_deltas, rel_labels = \
             self.get_boxes(fmap, im_sizes, image_offset, gt_boxes,
                            gt_classes, gt_rels, train_anchor_inds, proposals=proposals)
 
-        #import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         # Now classify them
         obj_fmap = self.obj_feature_map(fmap, rois)
         od_obj_dists = self.score_fc(obj_fmap)
         od_box_deltas = self.bbox_fc(obj_fmap).view(
-            -1, len(self.classes), 4) if self.mode != 'gtbox' else None
+            -1, len(self.classes), 4) if self.mode != 'gtbox' else None # 这个结果是 None
 
         od_box_priors = rois[:, 1:]
 
-        if (not self.training and not self.mode == 'gtbox') or self.mode in ('proposals', 'refinerels'):
+        if (not self.training and not self.mode == 'gtbox') or self.mode in ('proposals', 'refinerels'): # 这个条件判断为 false 不会被执行
             nms_inds, nms_scores, nms_preds, nms_boxes_assign, nms_boxes, nms_imgs = self.nms_boxes(
                 od_obj_dists,
                 rois,
@@ -334,40 +334,40 @@ class ObjectDetector(nn.Module):
                 rm_obj_labels[max_overlaps < 0.5] = 0
             else:
                 rm_obj_labels = None
-        else:
-            im_inds = rois[:, 0].long().contiguous() + image_offset
+        else: # 执行下面这段
+            im_inds = rois[:, 0].long().contiguous() + image_offset # shape(num_gt_boxes,)
             nms_scores = None
             nms_preds = None
             nms_boxes_assign = None
             nms_boxes = None
             box_priors = rois[:, 1:]
             rm_obj_labels = obj_labels
-            box_deltas = od_box_deltas
+            box_deltas = od_box_deltas # None
             obj_dists = od_obj_dists
 
-        #import pdb; pdb.set_trace()
+        # 最后的结果，没有注释的都是 None，od 应该是 object detection，然后 rm 可能是与 ROI 相关的东西
 
         return Result(
-            od_obj_dists=od_obj_dists,
-            rm_obj_dists=obj_dists,
+            od_obj_dists=od_obj_dists, # 经过 score_fc 最后拿到的矩阵，代表着每个 roi 在各个类别上的分数，shape(num_gt_boxes, 151)
+            rm_obj_dists=obj_dists, # 值同上
             obj_scores=nms_scores,
             obj_preds=nms_preds,
-            obj_fmap=obj_fmap,
+            obj_fmap=obj_fmap, # 最后的特征映射，shape(num_gt_boxes, 4096)
             od_box_deltas=od_box_deltas,
             rm_box_deltas=box_deltas,
             od_box_targets=bbox_targets,
             rm_box_targets=bbox_targets,
-            od_box_priors=od_box_priors,
-            rm_box_priors=box_priors,
+            od_box_priors=od_box_priors, # 值等于 gt_boxes，因为之前把 gt_boxes 直接当作 rois，shape(num_gt_boxes, 4)
+            rm_box_priors=box_priors, # 值同上
             boxes_assigned=nms_boxes_assign,
             boxes_all=nms_boxes,
-            od_obj_labels=obj_labels,
-            rm_obj_labels=rm_obj_labels,
+            od_obj_labels=obj_labels, # 这个就是 gt_classes 去掉每行的图片索引，shape(num_gt_boxes,)
+            rm_obj_labels=rm_obj_labels, # 值同上
             rpn_scores=rpn_scores,
             rpn_box_deltas=rpn_box_deltas,
-            rel_labels=rel_labels,
-            im_inds=im_inds,
-            fmap=fmap if return_fmap else None,
+            rel_labels=rel_labels, # 关系标签，里面包含了前景关系【即 gt_rels】以及超大量的背景关系，按图像索引、第一个对象索引和第二个对象索引排序。
+            im_inds=im_inds, # 图片索引，表示每个 roi 来自这批次中的哪张图片
+            fmap=fmap if return_fmap else None, # 仅通过特征提取网络后的特征映射，shape(batch_size, 512, 37, 37)
         )
 
     def nms_boxes(self, obj_dists, rois, box_deltas, im_sizes):
