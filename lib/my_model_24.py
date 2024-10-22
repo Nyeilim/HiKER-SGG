@@ -1,30 +1,30 @@
-from os import environ as os_environ
-import sys
 import pickle
+import sys
+from os import environ as os_environ
+
 import numpy as np
-from torch import tensor as torch_tensor, float32 as torch_float32, zeros as torch_zeros, cat as torch_cat, from_numpy as torch_from_numpy, inverse as torch_inverse, cat as torch_cat, zeros as torch_zeros, LongTensor as torch_LongTensor, bool as torch_bool, log as torch_log, int64 as torch_int64
+import torch
+from torch import tensor as torch_tensor, float32 as torch_float32, cat as torch_cat, zeros as torch_zeros, \
+    LongTensor as torch_LongTensor, log as torch_log, int64 as torch_int64
 from torch.cuda import current_device
 from torch.nn import Linear, Sequential, Module, AvgPool2d
+from torch.nn.functional import softmax as F_softmax, nll_loss as F_nll_loss
 from torch.nn.parallel import replicate, parallel_apply
-from torch.nn.functional import cross_entropy as F_cross_entropy, softmax as F_softmax, kl_div as F_kl_div, log_softmax as F_log_softmax, nll_loss as F_nll_loss
-from torch.nn.utils.rnn import PackedSequence
 from torchvision.ops import nms, roi_align
-from config import BATCHNORM_MOMENTUM
-from lib.resnet import resnet_l4
-from lib.fpn.box_utils import bbox_overlaps, center_size
-from lib.get_union_boxes import UnionBoxesAndFeats
-from lib.fpn.proposal_assignments.rel_assignments import rel_assignments
-from lib.object_detector import ObjectDetector, gather_res, load_vgg
-from lib.pytorch_misc import transpose_packed_sequence_inds, onehot_logits, arange, enumerate_by_image, diagonal_inds, Flattener
-from lib.surgery import filter_dets
-from lib.my_ggnn_10 import GGNN
-from lib.my_util import adj_normalize
 
+from lib.fpn.box_utils import bbox_overlaps
+from lib.fpn.proposal_assignments.rel_assignments import rel_assignments
+from lib.get_union_boxes import UnionBoxesAndFeats
+from lib.my_ggnn_10 import GGNN
+from lib.object_detector import ObjectDetector, gather_res, load_vgg
+from lib.pytorch_misc import onehot_logits, arange, enumerate_by_image, diagonal_inds, Flattener
+from lib.resnet import resnet_l4
+from lib.surgery import filter_dets
 
 np.set_printoptions(threshold=sys.maxsize)
 
 MODES = ('sgdet', 'sgcls', 'predcls')
-CURRENT_DEVICE = current_device()
+CURRENT_DEVICE = torch.device(f'cuda:{current_device()}')
 
 
 class GGNNRelReason(Module):
