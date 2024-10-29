@@ -69,7 +69,7 @@ class GGNNRelReason(Module):
 
         if self.mode == 'predcls':
             obj_logits = onehot_logits(obj_labels.data, self.num_obj_cls).clone().detach()
-        obj_probs = F_softmax(obj_logits, 1)
+        obj_probs = F_softmax(obj_logits, 1) # 这行代码的结果就是个常规意义上的 “独热编码”，shape(num_gt_boxes, num_classes)
 
         obj_fmaps = self.obj_proj(obj_fmaps)
         vr = self.rel_proj(vr)
@@ -79,8 +79,8 @@ class GGNNRelReason(Module):
         scpred_softmax = []
         scent_softmax= []
         for (_, obj_s, obj_e), (_, rel_s, rel_e) in zip(enumerate_by_image(im_inds.data), enumerate_by_image(rel_inds[:,0])):
-            # 调用 GGNN 内核
-            rl, ol, scpred, scent = self.ggnn(rel_inds[rel_s:rel_e, 1:] - obj_s, obj_probs[obj_s:obj_e], obj_fmaps[obj_s:obj_e], vr[rel_s:rel_e])
+            # 调用 GGNN 内核，然后把前向传播的每个结果添加到前面的列表中
+            rl, ol, scpred, scent = self.ggnn(rel_inds[rel_s:rel_e, 1:] - obj_s, obj_probs[obj_s:obj_e], obj_fmaps[obj_s:obj_e], vr[rel_s:rel_e]) # 实际上是每次前向传播，是处理一张图片的数据
             rel_logits.append(rl)
             obj_logits_refined.append(ol)
             scpred_softmax.append(scpred)
@@ -248,7 +248,7 @@ class KERN(Module):
         im_inds = result.im_inds - image_offset
         boxes = result.rm_box_priors
 
-        if self.training and result.rel_labels is None: # 这个条件语句不执行
+        if self.training and result.rel_labels is None: # False
             assert self.mode == 'sgdet'
             result.rel_labels = rel_assignments(im_inds.data, boxes.data, result.rm_obj_labels.data,
                                                 gt_boxes.data, gt_classes.data, gt_rels.data,

@@ -139,9 +139,9 @@ def onehot_logits(vec, num_classes, fill=1000):
     :param vec: 1d torch tensor
     :param num_classes: int
     :param fill: value that we want + and - things to be.
-    :return:
+    :return: 最后的返回值是 shape(num_gt_boxes, num_classes) 的张量，每行正确的标签等于 1000，不正确的等于 -1000
     """
-    onehot_result = vec.new(vec.size(0), num_classes).float().fill_(-fill)
+    onehot_result = vec.new(vec.size(0), num_classes).float().fill_(-fill) # 这里填的是 -fill，好奇怪
     arange_inds = vec.new(vec.size(0)).long()
     torch_arange(0, vec.size(0), out=arange_inds)
 
@@ -302,10 +302,11 @@ def gather_nd(x, index):
     grouped = x.view(-1, dim)[sel_inds]
     return grouped
 
-
+# 生成器函数，作用是将索引分组，比如对于一个索引列表 [0, 0, 1, 1, 2, 2]，调用这个生成器会有三次迭代输出
+# 分别为 (0,0,2) (1,2,4) (2,4,6)；以 (0,0,2) 为例，表示属于图片 0 的内容为索引列表[0,2) 的部分
 def enumerate_by_image(im_inds):
     im_inds_np = im_inds.cpu().numpy()
-    initial_ind = int(im_inds_np[0])
+    initial_ind = int(im_inds_np[0]) # 初始下标
     s = 0
     for i, val in enumerate(im_inds_np):
         if val != initial_ind:

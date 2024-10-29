@@ -365,7 +365,7 @@ class ObjectDetector(nn.Module):
             rm_obj_labels=rm_obj_labels, # 值同上
             rpn_scores=rpn_scores,
             rpn_box_deltas=rpn_box_deltas,
-            rel_labels=rel_labels, # 关系标签，里面包含了前景关系【即 gt_rels】以及超大量的背景关系，按图像索引、第一个对象索引和第二个对象索引排序。
+            rel_labels=rel_labels, # 关系标签，里面包含了前景关系【即 gt_rels】以及超大量的背景关系，按图像索引、第一个对象索引和第二个对象索引排序。shape(num_all_rels, 4) [img_ind, sub, obj, pred]
             im_inds=im_inds, # 图片索引，表示每个 roi 来自这批次中的哪张图片
             fmap=fmap if return_fmap else None, # 仅通过特征提取网络后的特征映射，shape(batch_size, 512, 37, 37)
         )

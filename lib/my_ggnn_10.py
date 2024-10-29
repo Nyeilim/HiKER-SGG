@@ -65,7 +65,7 @@ class GGNN(Module):
             # self.gn = ModuleList([GroupNorm(self.num_groups, self.hidden_channels) for _ in range(self.time_step_num-1)])
             self.gn = ModuleList([LayerNorm(self.hidden_channels) for _ in range(self.time_step_num-1)])
 
-        if use_embedding:
+        if use_embedding: # True
             with open(emb_path, 'rb') as fin:
                 self.emb_ent, self.emb_pred = pickle_load(fin)
             self.emb_ent = wrap(self.emb_ent)
@@ -79,7 +79,7 @@ class GGNN(Module):
         self.num_ont_pred = self.emb_pred.size(0)
         assert self.num_ont_pred == num_rel_cls + 9 + 8
 
-        if use_knowledge:
+        if use_knowledge: # True
             with open(graph_path, 'rb') as fin:
                 edge_dict = pickle_load(fin)
             self.adjmtx_ent2ent = edge_dict['edges_ent2ent']
@@ -210,8 +210,8 @@ class GGNN(Module):
 
     def forward(self, rel_inds, obj_probs, obj_fmaps, vr):
         # This is a per_image representation, not an embedding.
-        num_img_ent = obj_probs.size(0)
-        num_img_pred = rel_inds.size(0)
+        num_img_ent = obj_probs.size(0) # num_gt_boxes
+        num_img_pred = rel_inds.size(0) # num_all_rels
 
         debug_info = self.debug_info
         debug_info['rel_inds'] = rel_inds
