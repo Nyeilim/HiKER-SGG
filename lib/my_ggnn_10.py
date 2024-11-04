@@ -522,13 +522,13 @@ class GGNN(Module):
                 pred_cls_logits[:, superto2_index] = F_softmax(pred_cls_logits[:, superto2_index], dim=1).type(torch_float32)
                 pred_cls_logits[:, superother_index] = F_softmax(pred_cls_logits[:, superother_index], dim=1).type(torch_float32)
                 pred_cls_logits[:, 0] = 1 # 空关系即是个子谓词，也是个一级父级谓词
-
-                # img_all_rels[i] 属于某个子谓词的概率 = 属于某个一级父级谓词的概率 * 属于某个二级父级谓词的概率 * 属于某个子谓词的概率
+                # 看到这里终于看懂了，rels 实际上会计算 68 个父子谓词的 logits，然后按照树状层级分别应用 Softmax 形成条件概率，用条件概率得出全局概率
+                # img_all_rels[i] 属于某个子谓词的概率 = 属于某个一级父级谓词的概率 * 属于某个二级父级谓词的概率 * 在属于某父级谓词的条件下，属于某个子谓词的概率
                 pred_cls_logits = pred_cls_logits * scpred_score.data * scpred2_score.data # 逐元素乘积
                 # print(pred_cls_logits.shape)
                 # print(pred_cls_logits.sum(dim=1))
 
-                # Concatenate scpred_cls_score, superon_cls_score, superof_cls_score, superto_cls_score
+                # 其实就是 18 个一级/二级父级谓词的预测分数，横向拼接在一起，shape(img_all_rels, 18)
                 scpred_cls_score = torch_cat((scpred_cls_score, superon_cls_score, superof_cls_score, superto_cls_score), dim=1)
 
             # -----------------------

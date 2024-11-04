@@ -1,6 +1,18 @@
 {
   "HiKER-SGG": [
     {
+      "fileDescriptor": "$/lib/my_model_24.py",
+      "linenumber": 356,
+      "name": "blob.scatter",
+      "bookmarkType": "LETTER_F"
+    },
+    {
+      "fileDescriptor": "$/lib/my_model_24.py",
+      "linenumber": 266,
+      "name": "调用 GGNNRelReason",
+      "bookmarkType": "LETTER_J"
+    },
+    {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
       "linenumber": 415,
       "name": "SA: 概率转移代码",
@@ -17,18 +29,6 @@
       "linenumber": 82,
       "name": "调用 GGNN 内核",
       "bookmarkType": "LETTER_K"
-    },
-    {
-      "fileDescriptor": "$/lib/my_model_24.py",
-      "linenumber": 265,
-      "name": "调用 GGNNRelReason",
-      "bookmarkType": "LETTER_J"
-    },
-    {
-      "fileDescriptor": "$/lib/my_model_24.py",
-      "linenumber": 355,
-      "name": "blob.scatter",
-      "bookmarkType": "LETTER_F"
     },
     {
       "fileDescriptor": "$/lib/object_detector.py",
