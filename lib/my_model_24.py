@@ -89,13 +89,13 @@ class GGNNRelReason(Module):
         rel_logits = torch_cat(rel_logits, 0)
         scpred_softmax = torch_cat(scpred_softmax, 0)
 
-        if self.ggnn.refine_obj_cls:
+        if self.ggnn.refine_obj_cls: # False
             obj_logits_refined = torch_cat(obj_logits_refined, 0)
             obj_logits = obj_logits_refined
             scent_softmax = torch_cat(scent_softmax, 0)
 
         obj_probs = obj_logits
-        if self.mode == 'sgdet' and not self.training:
+        if self.mode == 'sgdet' and not self.training: # False
             # NMS here for baseline
             nms_mask = obj_probs.data.clone()
             nms_mask.zero_()

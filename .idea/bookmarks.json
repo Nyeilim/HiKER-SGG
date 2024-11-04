@@ -1,6 +1,18 @@
 {
   "HiKER-SGG": [
     {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 415,
+      "name": "SA: 概率转移代码",
+      "bookmarkType": "DIGIT_1"
+    },
+    {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 382,
+      "name": "BPL: 分歧点",
+      "bookmarkType": "LETTER_D"
+    },
+    {
       "fileDescriptor": "$/lib/my_model_24.py",
       "linenumber": 82,
       "name": "调用 GGNN 内核",
@@ -23,12 +35,6 @@
       "linenumber": 349,
       "name": "Detector 的返回值",
       "bookmarkType": "LETTER_I"
-    },
-    {
-      "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 415,
-      "name": "SA: 概率转移代码",
-      "bookmarkType": "DIGIT_1"
     },
     {
       "fileDescriptor": "$/lib/exp/train_fn.py",
@@ -59,12 +65,6 @@
       "linenumber": 184,
       "name": "BPL: Init 阶段创建独属于 BPL 方法的 MLP 层以及加载混淆矩阵",
       "bookmarkType": "LETTER_C"
-    },
-    {
-      "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 382,
-      "name": "BPL: 分歧点",
-      "bookmarkType": "LETTER_D"
     },
     {
       "fileDescriptor": "$/lib/evaluation/sg_eval.py",
