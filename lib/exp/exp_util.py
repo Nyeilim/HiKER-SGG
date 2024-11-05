@@ -2,12 +2,12 @@ import json
 
 best_matrices_file = '/output/data/best_matrices.json'
 
-
+# 这边 List 拿到的数据长这样：[{'R@100': 0.32365809238988463, 'R@20': 0.275271453097786, 'R@50': 0.3127690749291039}, {...}]
 def save_best_matrices(matrices_list, nc_matrices_list):
-    sum_list = [sum(row) for row in matrices_list]
+    sum_list = [sum([row['R@100'], row['R@50'], row['R@20']]) for row in matrices_list]
     max_value_index = find_max_value_index(sum_list)
 
-    nc_sum_list = [sum(row) for row in nc_matrices_list]
+    nc_sum_list = [sum([row['R@100'], row['R@50'], row['R@20']]) for row in nc_matrices_list]
     nc_max_value_index = find_max_value_index(nc_sum_list)
 
     matrices_data = {

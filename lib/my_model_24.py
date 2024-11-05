@@ -79,23 +79,24 @@ class GGNNRelReason(Module):
         scpred_softmax = []
         scent_softmax= []
         for (_, obj_s, obj_e), (_, rel_s, rel_e) in zip(enumerate_by_image(im_inds.data), enumerate_by_image(rel_inds[:,0])):
-            # 调用 GGNN 内核，然后把前向传播的每个结果添加到前面的列表中
+            # 调用 GGNN 内核，然后把前向传播的每个结果添加到前面的列表中。这里的返回值只有 rl scpred 有值
             rl, ol, scpred, scent = self.ggnn(rel_inds[rel_s:rel_e, 1:] - obj_s, obj_probs[obj_s:obj_e], obj_fmaps[obj_s:obj_e], vr[rel_s:rel_e]) # 实际上是每次前向传播，是处理一张图片的数据
             rel_logits.append(rl)
             obj_logits_refined.append(ol)
             scpred_softmax.append(scpred)
             scent_softmax.append(scent)
 
-        rel_logits = torch_cat(rel_logits, 0)
-        scpred_softmax = torch_cat(scpred_softmax, 0)
+        # 列表转二维 tensor
+        rel_logits = torch_cat(rel_logits, 0) # shape(all_rels, 51)
+        scpred_softmax = torch_cat(scpred_softmax, 0) # shape(all_rels, 18)
 
-        if self.ggnn.refine_obj_cls:
+        if self.ggnn.refine_obj_cls: # False
             obj_logits_refined = torch_cat(obj_logits_refined, 0)
             obj_logits = obj_logits_refined
             scent_softmax = torch_cat(scent_softmax, 0)
 
-        obj_probs = obj_logits
-        if self.mode == 'sgdet' and not self.training:
+        obj_probs = obj_logits # 从独热编码转换回 +-1000 的格式
+        if self.mode == 'sgdet' and not self.training: # False
             # NMS here for baseline
             nms_mask = obj_probs.data.clone()
             nms_mask.zero_()

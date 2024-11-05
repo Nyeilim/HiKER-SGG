@@ -79,7 +79,7 @@ class GGNN(Module):
         self.num_ont_pred = self.emb_pred.size(0)
         assert self.num_ont_pred == num_rel_cls + 9 + 8
 
-        if use_knowledge: # True
+        if use_knowledge: # True 是否使用知识库的边信息
             with open(graph_path, 'rb') as fin:
                 edge_dict = pickle_load(fin)
             self.adjmtx_ent2ent = edge_dict['edges_ent2ent']
@@ -210,48 +210,48 @@ class GGNN(Module):
 
     def forward(self, rel_inds, obj_probs, obj_fmaps, vr):
         # This is a per_image representation, not an embedding.
-        num_img_ent = obj_probs.size(0) # num_gt_boxes
-        num_img_pred = rel_inds.size(0) # num_all_rels
+        num_img_ent = obj_probs.size(0) # img_gt_boxes
+        num_img_pred = rel_inds.size(0) # img_all_rels = img_gt_boxes * (img_gt_boxes - 1); -1 是去除实体的自关系
 
         debug_info = self.debug_info
         debug_info['rel_inds'] = rel_inds
         debug_info['obj_probs'] = obj_probs
 
-        refine_obj_cls = self.refine_obj_cls
-
-        nodes_ont_ent = self.fc_init_ont_ent(self.emb_ent)
-        nodes_ont_pred = self.fc_init_ont_pred(self.emb_pred)
-        nodes_img_ent = obj_fmaps
+        refine_obj_cls = self.refine_obj_cls # False
+        # 词嵌入来自 emb_mtx_with_sccluster2_pred_ent.pkl，包含超类节点
+        nodes_ont_ent = self.fc_init_ont_ent(self.emb_ent) # 初始化 CE 节点，163(151+12) 个
+        nodes_ont_pred = self.fc_init_ont_pred(self.emb_pred) # 初始化 CP 节点，68(51+9+8) 个，CP 好像有两级超类，即下面说的 Superclass, Sub-superclass
+        nodes_img_ent = obj_fmaps # 初始化 SE 节点
         if self.use_lrga is True:
             original_vr = vr.clone()
-        nodes_img_pred = vr
-
+        nodes_img_pred = vr # 初始化 SP 节点
+        # SGG 图上的边
         edges_img_pred2subj = torch_zeros((num_img_pred, num_img_ent), dtype=torch_float32, device=CUDA_DEVICE, requires_grad=False)
-        edges_img_pred2subj[arange(num_img_pred), rel_inds[:, 0]] = 1
+        edges_img_pred2subj[arange(num_img_pred), rel_inds[:, 0]] = 1 # 使用这个矩阵，对于某个特定的 SP 节点【行】，我们可以找到其 CE Subject【列】
         edges_img_pred2obj = torch_zeros((num_img_pred, num_img_ent), dtype=torch_float32, device=CUDA_DEVICE, requires_grad=False)
-        edges_img_pred2obj[arange(num_img_pred), rel_inds[:, 1]] = 1
+        edges_img_pred2obj[arange(num_img_pred), rel_inds[:, 1]] = 1 # 使用这个矩阵，对于某个特定的 SP 节点【行】，我们可以找到其 CE Object【列】
         edges_img_subj2pred = edges_img_pred2subj.t()
         edges_img_obj2pred = edges_img_pred2obj.t()
-
+        # Bridge Edge 桥边，下面这三行是 SE/CE 之间的桥边
         edges_img2ont_ent = torch_zeros((num_img_ent, self.num_ont_ent), dtype=torch_float32, device=CUDA_DEVICE, requires_grad=False)
-        edges_img2ont_ent[:, :151] = obj_probs.clone().detach()
+        edges_img2ont_ent[:, :151] = obj_probs.clone().detach() # 使用独热编码的标注，作为邻接矩阵的值；使用该矩阵，对于某个特定的 SE 节点，我们可以找到其 CE 节点
         edges_ont2img_ent = edges_img2ont_ent.t()
-
-        edges_img2ont_pred = torch_zeros((num_img_pred, self.num_ont_pred), dtype=torch_float32, device=CUDA_DEVICE, requires_grad=False)
+        ## SP/CP 之间的桥边
+        edges_img2ont_pred = torch_zeros((num_img_pred, self.num_ont_pred), dtype=torch_float32, device=CUDA_DEVICE, requires_grad=False) # SP/CP 的邻接矩阵未进行初始化；使用该矩阵，对于某个特定的 SP 节点，我们可以找到其 CP 节点
         edges_ont2img_pred = edges_img2ont_pred.t()
 
         ent_cls_logits = None
         scent_cls_score = None
+        # KG 图上的边，信息来自 all_edges_with_sccluster2_pred_ent.pkl；第一维代表着边类型 type，猜测和超类节点有关？
+        edges_ont_ent2ent = self.edges_ont_ent2ent # shape(11,163,163)
+        edges_ont_pred2ent = self.edges_ont_pred2ent # shape(3,68,163)
+        edges_ont_ent2pred = self.edges_ont_ent2pred # shape(3,163,68)
+        edges_ont_pred2pred = self.edges_ont_pred2pred # shape(6,68,68)
 
-        edges_ont_ent2ent = self.edges_ont_ent2ent
-        edges_ont_pred2ent = self.edges_ont_pred2ent
-        edges_ont_ent2pred = self.edges_ont_ent2pred
-        edges_ont_pred2pred = self.edges_ont_pred2pred
-
-        num_edge_types_ent2ent = self.num_edge_types_ent2ent
-        num_edge_types_pred2ent = self.num_edge_types_pred2ent
-        num_edge_types_ent2pred = self.num_edge_types_ent2pred
-        num_edge_types_pred2pred = self.num_edge_types_pred2pred
+        num_edge_types_ent2ent = self.num_edge_types_ent2ent # 11
+        num_edge_types_pred2ent = self.num_edge_types_pred2ent # 3
+        num_edge_types_ent2pred = self.num_edge_types_ent2pred # 3
+        num_edge_types_pred2pred = self.num_edge_types_pred2pred # 6
 
         with_clean_classifier = self.with_clean_classifier
         with_transfer = self.with_transfer
@@ -260,18 +260,18 @@ class GGNN(Module):
         if with_clean_classifier and with_transfer:
             pred_adj_nor = self.pred_adj_nor
 
-        for t in range(self.time_step_num):
+        for t in range(self.time_step_num): # 会进行 3 个时间步
             message_send_ont_ent = self.fc_mp_send_ont_ent(nodes_ont_ent)
             message_send_ont_pred = self.fc_mp_send_ont_pred(nodes_ont_pred)
             message_send_img_ent = self.fc_mp_send_img_ent(nodes_img_ent)
             message_send_img_pred = self.fc_mp_send_img_pred(nodes_img_pred)
 
             # NOTE: there's some vectorization opportunity right here.
-            message_received_ont_ent = self.fc_mp_receive_ont_ent(torch_cat(
-                [torch_mm(edges_ont_ent2ent[i].t(), message_send_ont_ent) for i in range(num_edge_types_ent2ent)] +
-                [torch_mm(edges_ont_pred2ent[i].t(), message_send_ont_pred) for i in range(num_edge_types_pred2ent)] +
-                [torch_mm(edges_ont2img_ent, message_send_img_ent),]
-            , 1))
+            message_received_ont_ent = self.fc_mp_receive_ont_ent(torch_cat( # shape(163,1024)
+                [torch_mm(edges_ont_ent2ent[i].t(), message_send_ont_ent) for i in range(num_edge_types_ent2ent)] + # 收集来自相连 CE 节点的信息
+                [torch_mm(edges_ont_pred2ent[i].t(), message_send_ont_pred) for i in range(num_edge_types_pred2ent)] +  # 收集来自相连 CP 节点的信息
+                [torch_mm(edges_ont2img_ent, message_send_img_ent),] # 收集来自相连 SE 节点的信息
+            , 1)) # dim==1 就是在列方向上拼接，本来有个长度为 n 的列表，每个元素是个 shape(x,y) 的 tensor，拼接后将会是个 (x,y*n) 的 tensor
 
             message_received_ont_pred = self.fc_mp_receive_ont_pred(
                 torch_cat(
@@ -293,12 +293,12 @@ class GGNN(Module):
                 torch_mm(edges_img_pred2obj, message_send_img_ent),
                 torch_mm(edges_img2ont_pred, message_send_ont_pred),
             ], 1))
-
+            # 上面这段就是信息传递的过程，最后四种节点的维度都是 1024
             del message_send_ont_pred, message_send_img_ent
-
-            z_ont_ent = torch_sigmoid(self.fc_eq3_w_ont_ent(message_received_ont_ent) + self.fc_eq3_u_ont_ent(nodes_ont_ent))
-            r_ont_ent = torch_sigmoid(self.fc_eq4_w_ont_ent(message_received_ont_ent) + self.fc_eq4_u_ont_ent(nodes_ont_ent))
-            h_ont_ent = torch_tanh(self.fc_eq5_w_ont_ent(message_received_ont_ent) + self.fc_eq5_u_ont_ent(r_ont_ent * nodes_ont_ent))
+            # 下面这段就是 GRU Rules
+            z_ont_ent = torch_sigmoid(self.fc_eq3_w_ont_ent(message_received_ont_ent) + self.fc_eq3_u_ont_ent(nodes_ont_ent)) # 更新门
+            r_ont_ent = torch_sigmoid(self.fc_eq4_w_ont_ent(message_received_ont_ent) + self.fc_eq4_u_ont_ent(nodes_ont_ent)) # 重置门
+            h_ont_ent = torch_tanh(self.fc_eq5_w_ont_ent(message_received_ont_ent) + self.fc_eq5_u_ont_ent(r_ont_ent * nodes_ont_ent)) # 候选隐状态
             del message_received_ont_ent, r_ont_ent
             # nodes_ont_ent_new = (1 - z_ont_ent) * nodes_ont_ent + z_ont_ent * h_ont_ent
             nodes_ont_ent = (1 - z_ont_ent) * nodes_ont_ent + z_ont_ent * h_ont_ent
@@ -324,18 +324,18 @@ class GGNN(Module):
             del message_received_img_pred, r_img_pred
             nodes_img_pred = (1 - z_img_pred) * nodes_img_pred + z_img_pred * h_img_pred
             del z_img_pred, h_img_pred
-            if self.use_lrga is True:
+            if self.use_lrga is True: # False
                 nodes_img_pred = self.dimension_reduce[t](torch_cat((self.attention[t](original_vr), nodes_img_pred), dim=1))
                 if t != self.time_step_num - 1:
                     # No ReLU nor batchnorm for last layer
                     nodes_img_pred = self.gn[t](F_relu(nodes_img_pred))
 
-            # Superclass predicate
+            # Superclass predicate 这三个 CP 的超类没有被使用啊，实际使用的是下面两级超类 9+8=17 个超类
             geometric = [1, 2, 3, 4, 5, 8, 10, 22, 23, 28, 29, 31, 32, 33, 43]
             possesive = [6, 7, 9, 16, 17, 20, 30, 36, 27, 50, 42]
             semantic = [11, 12, 13, 14, 15, 18, 19, 21, 24, 25, 26, 34, 35, 37, 38, 39, 40, 41, 44, 45, 46, 47, 48, 49]
 
-            # Superclass predicate
+            # Superclass predicate，一级父级谓词，包含 50 个子谓词
             doing = [14, 37, 47, 38]
             wear = [48, 49]
             superon = [28, 34, 35, 26, 24, 40, 41, 31, 18]
@@ -346,7 +346,7 @@ class GGNN(Module):
             superto = [1, 7, 42, 9, 19, 17, 44]
             superother = [3, 11, 20, 21, 39, 43]
 
-            # Sub-superclass predicate
+            # Sub-superclass predicate，二级父级谓词，对一级父级谓词 superon, superof, superto 的再次细分，包含 24 个子谓词
             superon1 = [28, 34, 35, 18]
             superon2 = [26, 24, 40, 41]
             superon3 = [31]
@@ -379,9 +379,9 @@ class GGNN(Module):
             # conf_superof = np.load('/home/ce/data/vg/conf_mat_superof.npy')
             # conf_superof = torch_tensor(conf_superof, dtype=torch_float32, device=CUDA_DEVICE, requires_grad=False)
 
-            # 是否使用 BPL 方法在这里出现分歧
+            # 是否使用 BPL 方法在这里出现分歧，这两个层的结构都是一样的，所以不知道实际有什么作用，也许在初始化加载模型时参数的赋值会有所不同？
             if with_clean_classifier:
-                pred_cls_logits = torch_mm(self.fc_output_proj_img_pred_clean(nodes_img_pred), self.fc_output_proj_ont_pred_clean(nodes_ont_pred).t())
+                pred_cls_logits = torch_mm(self.fc_output_proj_img_pred_clean(nodes_img_pred), self.fc_output_proj_ont_pred_clean(nodes_ont_pred).t()) # (i,j) 的值其实是两个 SP/CP 节点向量的内积，可当作相似度矩阵【但是它们模不等于1啊？存疑：写错了？】
             else:
                 pred_cls_logits = torch_mm(self.fc_output_proj_img_pred(nodes_img_pred), self.fc_output_proj_ont_pred(nodes_ont_pred).t())
 
@@ -403,20 +403,24 @@ class GGNN(Module):
                 # superon_cls_score = F_softmax((conf_superon @ pred_cls_logits[:, 60:63].T).T, dim=1)
                 # superof_cls_score = F_softmax((conf_superof @ pred_cls_logits[:, 63:66].T).T, dim=1)
                 # superto_cls_score = F_softmax((conf_superto @ pred_cls_logits[:, 66:68].T).T, dim=1)
-                scpred_cls_score = F_softmax(pred_cls_logits[:, index], dim=1)
-                superon_cls_score = F_softmax(pred_cls_logits[:, 60:63], dim=1)
-                superof_cls_score = F_softmax(pred_cls_logits[:, 63:66], dim=1)
-                superto_cls_score = F_softmax(pred_cls_logits[:, 66:68], dim=1)
-                pred_cls_logits = pred_cls_logits[:, :51]
-                # 这行代码非常重要，好像就是概率转移 adaptive refinement，使用概率转移矩阵的置换矩阵来进行查表；
+                scpred_cls_score = F_softmax(pred_cls_logits[:, index], dim=1) # img_all_rels 对空关系和 9 个一级父级谓词的预测分数
+                superon_cls_score = F_softmax(pred_cls_logits[:, 60:63], dim=1) # img_all_rels 对二级父级谓词 superon1/2/3 的预测分数
+                superof_cls_score = F_softmax(pred_cls_logits[:, 63:66], dim=1) # img_all_rels 对二级父级谓词 superof1/2/3 的预测分数
+                superto_cls_score = F_softmax(pred_cls_logits[:, 66:68], dim=1) # img_all_rels 对二级父级谓词 superto1/2 的预测分数
+                pred_cls_logits = pred_cls_logits[:, :51] # 包含初始 51 个谓词【包含空关系】的相似度矩阵
+                # 这段代码非常重要，好像就是概率转移 adaptive refinement，使用概率转移矩阵的置换矩阵来进行查表；
                 # 然后概率转移之后 pred_cls_logits 每行的概率之和不等于 1，所以需要归一化，应该就是下面的操作
                 if self.with_transfer:
-                    pred_adj_np = np.load('/output/data/misc/conf_mat_updated.npy')  # 加载概率转移矩阵
-                    pred_adj_nor = torch_tensor(pred_adj_np, dtype=torch_float32, device=CUDA_DEVICE)
-                    pred_cls_logits = (pred_adj_nor @ pred_cls_logits.T).T
+                    pred_adj_np = np.load('/output/data/misc/conf_mat_updated.npy')  # 加载混淆矩阵
+                    pred_adj_nor = torch_tensor(pred_adj_np, dtype=torch_float32, device=CUDA_DEVICE) # shape(51,51), torch.sum(pred_adj_nor, dim=1) == [1,1,1,1...]
+                    pred_cls_logits = (pred_adj_nor @ pred_cls_logits.T).T # 利用混淆矩阵实现概率转移, shape(img_all_rels, 51)
 
                 scpred_score = torch_zeros_like(pred_cls_logits, requires_grad=True, device=CUDA_DEVICE, dtype=torch_float32)
                 scpred2_score = torch_ones_like(pred_cls_logits, requires_grad=True, device=CUDA_DEVICE, dtype=torch_float32)
+
+                # scpred2_score.shape(img_all_rels, 51)，前面算出了每个 img_all_rels 对应的二级父级谓词概率，这里把每个概率填入对应的子类格子中。
+                # 比如 img_all_rels[0] 属于二级父级谓词 superon1 的概率为 0.3，
+                # 而 scpred2_score[0][28] 这个子类谓词 28 又属于二级父级谓词 superon1，则 scpred2_score[0][28] = 0.3
                 for i in superon1:
                     scpred2_score.data[:, i] = superon_cls_score[:, 0]
                 for i in superon2:
@@ -434,6 +438,7 @@ class GGNN(Module):
                 for i in superto2:
                     scpred2_score.data[:, i] = superto_cls_score[:, 1]
 
+                # 下面都是长度为 51 的张量，作为索引数组
                 doing_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
                 wear_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
                 superon_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
@@ -451,9 +456,11 @@ class GGNN(Module):
                 superof3_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
                 superto1_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
                 superto2_index = torch_zeros(pred_cls_logits.shape[1], requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
+
+                # 这里的流程和上面类似，前面算出了每个 img_all_rels 对应的空关系和一级父级谓词概率，这里把每个概率填入对应的子类格子中。
                 for j in doing:
                     scpred_score.data[:, j] = scpred_cls_score[:, 1]
-                    doing_index[j] = True
+                    doing_index[j] = True # 将列表的值转化为长度 51 的索引数组
                 for j in wear:
                     scpred_score.data[:, j] = scpred_cls_score[:, 2]
                     wear_index[j] = True
@@ -478,6 +485,7 @@ class GGNN(Module):
                 for j in superother:
                     scpred_score.data[:, j] = scpred_cls_score[:, 9]
                     superother_index[j] = True
+                # 这里是上边忘了创建二级父级谓词的索引数组，这里补上
                 for j in superon1:
                     superon1_index[j] = True
                 for j in superon2:
@@ -494,8 +502,10 @@ class GGNN(Module):
                     superto1_index[j] = True
                 for j in superto2:
                     superto2_index[j] = True
-                scpred_score.data[:, 0] = scpred_cls_score[:, 0]
+                scpred_score.data[:, 0] = scpred_cls_score[:, 0] # 把空关系的预测概率给补上
 
+                # 区别与把整个行向量拿去做 Softmax ，这里只把归属于相同一级父级谓词的子谓词 logit 拿去做 Softmax，比如 doing = [14, 37, 47, 38]，
+                # 那就把这 4 个子谓词的预测 logit 拿出来去做 Softmax，这样就有 torch.sum(pred_cls_logits[0][doing_index]) == 1
                 pred_cls_logits = pred_cls_logits.type(torch_float32)
                 pred_cls_logits[:, doing_index] = F_softmax(pred_cls_logits[:, doing_index], dim=1).type(torch_float32)
                 pred_cls_logits[:, wear_index] = F_softmax(pred_cls_logits[:, wear_index], dim=1).type(torch_float32)
@@ -511,20 +521,22 @@ class GGNN(Module):
                 pred_cls_logits[:, superto1_index] = F_softmax(pred_cls_logits[:, superto1_index], dim=1).type(torch_float32)
                 pred_cls_logits[:, superto2_index] = F_softmax(pred_cls_logits[:, superto2_index], dim=1).type(torch_float32)
                 pred_cls_logits[:, superother_index] = F_softmax(pred_cls_logits[:, superother_index], dim=1).type(torch_float32)
-                pred_cls_logits[:, 0] = 1
-                pred_cls_logits = pred_cls_logits * scpred_score.data * scpred2_score.data
+                pred_cls_logits[:, 0] = 1 # 空关系即是个子谓词，也是个一级父级谓词
+                # 看到这里终于看懂了，rels 实际上会计算 68 个父子谓词的 logits，然后按照树状层级分别应用 Softmax 形成条件概率，用条件概率得出全局概率
+                # img_all_rels[i] 属于某个子谓词的概率 = 属于某个一级父级谓词的概率 * 属于某个二级父级谓词的概率 * 在属于某父级谓词的条件下，属于某个子谓词的概率
+                pred_cls_logits = pred_cls_logits * scpred_score.data * scpred2_score.data # 逐元素乘积
                 # print(pred_cls_logits.shape)
                 # print(pred_cls_logits.sum(dim=1))
 
-                # Concatenate scpred_cls_score, superon_cls_score, superof_cls_score, superto_cls_score
+                # 其实就是 18 个一级/二级父级谓词的预测分数，横向拼接在一起，shape(img_all_rels, 18)
                 scpred_cls_score = torch_cat((scpred_cls_score, superon_cls_score, superof_cls_score, superto_cls_score), dim=1)
 
             # -----------------------
             # 上面是使用 BPL 方法的逻辑
 
-            edges_img2ont_pred = F_softmax(pred_cls_logits, dim=1)
+            edges_img2ont_pred = F_softmax(pred_cls_logits, dim=1) # 前面那个是 SP/CP 相似度矩阵，这边通过 Softmax 将其压缩到 (0,1)
             edges_ont2img_pred = edges_img2ont_pred.t()
-            if refine_obj_cls:
+            if refine_obj_cls: # False
                 ent_cls_logits = torch_mm(self.fc_output_proj_img_ent(nodes_img_ent), self.fc_output_proj_ont_ent(nodes_ont_ent).t())
                 edges_img2ont_ent = F_softmax(ent_cls_logits, dim=1)
                 edges_ont2img_ent = edges_img2ont_ent.t()
