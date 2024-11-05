@@ -6,11 +6,11 @@ import torch
 from torch import no_grad as torch_no_grad
 from torch.cuda.amp import autocast
 from tqdm import tqdm
-from lib.torchinfo import summary
 
 sys.path.append("/output/HiKER-SGG/")
 
 from config import ModelConfig, BOX_SCALE, IM_SCALE
+from lib.torchinfo import summary
 from lib.exp.exp_util import load_best_matrices
 from lib.pytorch_misc import optimistic_restore
 # 如果把 sg_val 放在 my_model_24, visual_genome 后面就会导入报错，因为里面有个很重要的 setup 语句能导入 lib.fpn.box_intersections_cpu.bbox
@@ -26,8 +26,7 @@ exp_name = 'hikersgg_predcls_test'
 write = tqdm.write  # 函数引用赋值，用来打印日志
 use_bpl = True # 启用还是关闭 BPL 方法
 use_sa = False # 启用还是关闭 SA 方法
-# test_epoch = load_best_matrices()['best_mr_epoch'] # 需要测试第几个 epoch 训练出来的模型
-test_epoch = 2
+test_epoch = load_best_matrices()['best_mr_epoch'] # 需要测试第几个 epoch 训练出来的模型
 print(f"Start test epoch {test_epoch}")
 
 # Change ckpt path for the evaluated model

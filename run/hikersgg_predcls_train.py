@@ -17,7 +17,7 @@ from lib.my_util import adj_normalize
 
 alpha = 0.9
 start_epoch = 0
-end_epoch = 20
+end_epoch = 1 # 20
 optimizer = get_optim(conf.lr * conf.num_gpus * conf.batch_size)
 detector, optimizer = amp.initialize(detector, optimizer, opt_level="O0")
 
