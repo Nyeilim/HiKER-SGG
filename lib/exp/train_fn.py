@@ -68,12 +68,11 @@ def train_batch(b, optimizer, verbose=False):
         loss_rel = detector.rel_loss(result)
         loss_scpred = detector.scpred_loss(result)
 
-        loss = loss_class + loss_rel + loss_scpred
+        loss = loss_class + loss_rel + loss_scpred # 成本函数
     with amp.scale_loss(loss, optimizer) as scaled_loss:
-        scaled_loss.backward()
-    clip_grad_norm(
-        [(n, p) for n, p in detector.named_parameters() if p.grad is not None],
-        max_norm=conf.clip, verbose=verbose, clip=True)
+        scaled_loss.backward() # 启用反向传播
+    clip_grad_norm([(n, p) for n, p in detector.named_parameters() if p.grad is not None],
+                    max_norm=conf.clip, verbose=verbose, clip=True) # 梯度裁剪
     optimizer.step()
     return result, {
         'loss_class': float(loss_class),
