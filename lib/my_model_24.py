@@ -68,7 +68,7 @@ class GGNNRelReason(Module):
         """
 
         if self.mode == 'predcls':
-            obj_logits = onehot_logits(obj_labels.data, self.num_obj_cls).clone().detach()
+            obj_logits = onehot_logits(obj_labels.data, self.num_obj_cls).clone().detach() # 用于生成 onehot 的 logit，里面向量的值都是 +-1000
         obj_probs = F_softmax(obj_logits, 1) # 这行代码的结果就是个常规意义上的 “独热编码”，shape(num_gt_boxes, num_classes)
 
         obj_fmaps = self.obj_proj(obj_fmaps)
@@ -115,7 +115,7 @@ class GGNNRelReason(Module):
 
             obj_preds = torch_tensor(nms_mask * obj_probs.data, requires_grad=False, device=CURRENT_DEVICE, dtype=torch_float32)[:,1:].max(1)[1] + 1
         else:
-            obj_preds = obj_labels if obj_labels is not None else obj_probs[:,1:].max(1)[1] + 1
+            obj_preds = obj_labels if obj_labels is not None else obj_probs[:,1:].max(1)[1] + 1 # PredCl 和 SGCl 任务不用做分类，直接拿真实标签作为 entity 的预测标签
 
         return obj_logits, obj_preds, rel_logits, scpred_softmax, scent_softmax
 
@@ -206,7 +206,7 @@ class KERN(Module):
                 rel_counts = pickle.load(fin)
             beta = (class_volume - 1.0) / class_volume
             self.rel_class_weights = (1.0 - beta) / (1 - (beta ** rel_counts))
-            self.rel_class_weights *= float(self.num_rels) / np.sum(self.rel_class_weights)
+            self.rel_class_weights *= float(self.num_rels) / np.sum(self.rel_class_weights) # 这是啥？加权值的计算吗？
         else:
             self.rel_class_weights = np.ones((self.num_rels,))
 

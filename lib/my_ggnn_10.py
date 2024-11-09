@@ -413,7 +413,7 @@ class GGNN(Module):
                 if self.with_transfer:
                     pred_adj_np = np.load('/output/data/misc/conf_mat_updated.npy')  # 加载混淆矩阵
                     pred_adj_nor = torch_tensor(pred_adj_np, dtype=torch_float32, device=CUDA_DEVICE) # shape(51,51), torch.sum(pred_adj_nor, dim=1) == [1,1,1,1...]
-                    pred_cls_logits = (pred_adj_nor @ pred_cls_logits.T).T # 利用混淆矩阵实现概率转移, shape(img_all_rels, 51)
+                    pred_cls_logits = (pred_adj_nor @ pred_cls_logits.T).T # 利用混淆矩阵实现概率转移，shape(img_all_rels, 51)
 
                 scpred_score = torch_zeros_like(pred_cls_logits, requires_grad=True, device=CUDA_DEVICE, dtype=torch_float32)
                 scpred2_score = torch_ones_like(pred_cls_logits, requires_grad=True, device=CUDA_DEVICE, dtype=torch_float32)

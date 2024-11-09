@@ -139,9 +139,9 @@ def val_epoch():
     detector.train()
     return recall, recall_mp, mean_recall, mean_recall_mp
 
-ckpt = torch.load(conf.ckpt)    # 加载参数文件
-optimistic_restore(detector, ckpt['state_dict'], skip_clean=False)  # 参数导入模型中
-detector.cuda() # 模型移至 CUDA
+ckpt = torch.load(conf.ckpt) # 加载参数文件
+optimistic_restore(detector, ckpt['state_dict'], skip_clean=False) # 参数导入模型中
+detector = detector.cuda() # 模型移至 CUDA
 
 # print(print_para(detector), flush=True) # 打印模型参数
 # print(detector) # 原生方法打印模型结构

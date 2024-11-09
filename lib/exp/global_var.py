@@ -105,7 +105,7 @@ for n, param in detector.detector.named_parameters():
 # 加载模型并迁移至 GPU，这里最开始加载的其实是 GB-Net 的权重
 ckpt = torch.load(conf.ckpt)
 optimistic_restore(detector, ckpt['state_dict'], skip_clean=False)
-detector.cuda()
+detector = detector.cuda()
 
 # ------------------------------------------------------------------------------------
 
