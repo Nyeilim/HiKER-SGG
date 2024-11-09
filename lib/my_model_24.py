@@ -372,8 +372,8 @@ class KERN(Module):
         else:
             return torch_zeros(1, requires_grad=False, device=CURRENT_DEVICE, dtype=torch_float32)
 
-    def rel_loss(self, result):
-        return F_nll_loss(torch_log(result.rel_dists + 1e-10), result.rel_labels[:, -1], weight=self.rel_class_weights)
+    def rel_loss(self, result): # 这里做损失的 rel_dists 已经是经过 Softmax 后的，torch.sum(rel_dists[0]) == 1，所以直接过 Log 再过 NLL 就好
+        return F_nll_loss(torch_log(result.rel_dists + 1e-10), result.rel_labels[:, -1], weight=self.rel_class_weights) # rel_class_weights.shape(51,) 目前来看它是个全为 1 的权值列表，负责对谓词的重要程度进行加权
 
 
     def scpred_loss(self, result):

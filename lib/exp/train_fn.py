@@ -64,15 +64,15 @@ def train_batch(b, optimizer, verbose=False):
     optimizer.zero_grad()
     with autocast():
         result = detector[b]
-        loss_class = detector.obj_loss(result)
+        loss_class = detector.obj_loss(result) # refine_obj_cls 为 False 情况下默认返回 0
         loss_rel = detector.rel_loss(result)
         loss_scpred = detector.scpred_loss(result)
 
         loss = loss_class + loss_rel + loss_scpred # 成本函数
     with amp.scale_loss(loss, optimizer) as scaled_loss: # 损失缩放，混合精度
         scaled_loss.backward() # 启用反向传播，计算出各个参数的梯度
-    clip_grad_norm([(n, p) for n, p in detector.named_parameters() if p.grad is not None],
-                    max_norm=conf.clip, verbose=verbose, clip=True) # 梯度裁剪
+    clip_grad_norm([(n, p) for n, p in detector.named_parameters() if p.grad is not None], # 所有叶子节点，即 W、B
+                    max_norm=conf.clip, verbose=verbose, clip=True) # 梯度裁剪，所有参数梯度 L2 范数的和不能超过 conf.clip
     optimizer.step() # 梯度下降
     return result, {
         'loss_class': float(loss_class),
