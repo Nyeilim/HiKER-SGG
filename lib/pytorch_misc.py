@@ -24,20 +24,20 @@ from torch.nn import Module
 write = tqdm.write
 CURRENT_DEVICE = current_device()
 
-
+# 恢复模型参数，skip_clean 表示尝试跳过带有 _clean 的层
 def optimistic_restore(network, state_dict, skip_clean=True):
     mismatch = False
     own_state = network.state_dict()
     for name, param in state_dict.items():
-        if name not in own_state:
+        if name not in own_state: # Name 不存在
             print("Unexpected key {} in state_dict with size {}".format(name, param.size()))
             mismatch = True
-        elif param.size() == own_state[name].size():
+        elif param.size() == own_state[name].size(): # Name Size 都对的上就执行正常的逻辑
             if '_clean' in name and skip_clean is True:
                 print(f'optimistic_restore: skipping _clean param {name}')
                 continue
             own_state[name].copy_(param)
-        else:
+        else: # Size 对不上
             print("Network has {} with size {}, ckpt has {}".format(name,
                                                                     own_state[name].size(),
                                                                     param.size()))

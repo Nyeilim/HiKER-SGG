@@ -1,16 +1,10 @@
 {
   "HiKER-SGG": [
     {
-      "fileDescriptor": "$/lib/my_model_24.py",
-      "linenumber": 356,
-      "name": "blob.scatter",
-      "bookmarkType": "LETTER_F"
-    },
-    {
-      "fileDescriptor": "$/lib/my_model_24.py",
-      "linenumber": 266,
-      "name": "调用 GGNNRelReason",
-      "bookmarkType": "LETTER_J"
+      "fileDescriptor": "$/dataloaders/visual_genome.py",
+      "linenumber": 492,
+      "name": "BPL: 加载数据集平衡",
+      "bookmarkType": "DIGIT_2"
     },
     {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
@@ -20,27 +14,45 @@
     },
     {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 382,
-      "name": "BPL: 分歧点",
-      "bookmarkType": "LETTER_D"
+      "linenumber": 184,
+      "name": "BPL: Init 阶段创建独属于 BPL 方法的 MLP 层以及加载混淆矩阵",
+      "bookmarkType": "LETTER_C"
     },
     {
-      "fileDescriptor": "$/lib/my_model_24.py",
-      "linenumber": 82,
-      "name": "调用 GGNN 内核",
-      "bookmarkType": "LETTER_K"
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 255,
+      "name": "BPL\u0026SA: 成员变量赋值给局部变量",
+      "bookmarkType": "LETTER_B"
     },
     {
-      "fileDescriptor": "$/lib/object_detector.py",
-      "linenumber": 349,
-      "name": "Detector 的返回值",
-      "bookmarkType": "LETTER_I"
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 39,
+      "name": "BPL\u0026SA: 外部变量赋值给成员变量",
+      "bookmarkType": "LETTER_A"
     },
     {
       "fileDescriptor": "$/lib/exp/train_fn.py",
       "linenumber": 16,
       "name": "打印进度条",
       "bookmarkType": "LETTER_Z"
+    },
+    {
+      "fileDescriptor": "$/lib/evaluation/sg_eval.py",
+      "linenumber": 17,
+      "name": "导入 Cython 相关库",
+      "bookmarkType": "DIGIT_3"
+    },
+    {
+      "fileDescriptor": "$/lib/exp/train_fn.py",
+      "linenumber": 65,
+      "name": "训练时前向传播的入口",
+      "bookmarkType": "LETTER_E"
+    },
+    {
+      "fileDescriptor": "$/lib/my_model_24.py",
+      "linenumber": 356,
+      "name": "blob.scatter",
+      "bookmarkType": "LETTER_F"
     },
     {
       "fileDescriptor": "$/dataloaders/visual_genome.py",
@@ -55,40 +67,22 @@
       "bookmarkType": "LETTER_H"
     },
     {
-      "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 39,
-      "name": "BPL\u0026SA: 外部变量赋值给成员变量",
-      "bookmarkType": "LETTER_A"
+      "fileDescriptor": "$/lib/object_detector.py",
+      "linenumber": 349,
+      "name": "Detector 的返回值",
+      "bookmarkType": "LETTER_I"
     },
     {
-      "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 184,
-      "name": "BPL: Init 阶段创建独属于 BPL 方法的 MLP 层以及加载混淆矩阵",
-      "bookmarkType": "LETTER_C"
+      "fileDescriptor": "$/lib/my_model_24.py",
+      "linenumber": 266,
+      "name": "调用 GGNNRelReason",
+      "bookmarkType": "LETTER_J"
     },
     {
-      "fileDescriptor": "$/lib/evaluation/sg_eval.py",
-      "linenumber": 17,
-      "name": "导入 Cython 相关库",
-      "bookmarkType": "DIGIT_3"
-    },
-    {
-      "fileDescriptor": "$/dataloaders/visual_genome.py",
-      "linenumber": 492,
-      "name": "BPL: 加载数据集平衡",
-      "bookmarkType": "DIGIT_2"
-    },
-    {
-      "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 255,
-      "name": "BPL\u0026SA: 成员变量赋值给局部变量",
-      "bookmarkType": "LETTER_B"
-    },
-    {
-      "fileDescriptor": "$/lib/exp/train_fn.py",
-      "linenumber": 65,
-      "name": "训练时前向传播的入口",
-      "bookmarkType": "LETTER_E"
+      "fileDescriptor": "$/lib/my_model_24.py",
+      "linenumber": 82,
+      "name": "调用 GGNN 内核",
+      "bookmarkType": "LETTER_K"
     }
   ]
 }

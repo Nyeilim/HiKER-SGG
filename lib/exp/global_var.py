@@ -98,7 +98,7 @@ detector = KERN(classes=train.ind_to_classes, rel_classes=train.ind_to_predicate
                 class_volume=1.0, with_clean_classifier=use_bpl, with_transfer=use_sa, sa=use_sa, config=conf,
                 )
 
-# Freeze the detector 冻结参数
+# Freeze the detector 冻结 Faster-RCNN 参数
 for n, param in detector.detector.named_parameters():
     param.requires_grad = False
 
