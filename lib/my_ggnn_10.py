@@ -370,24 +370,17 @@ class GGNN(Module):
             building = [22, 24, 65, 106]
             food = [5, 49, 86, 94]
 
-            # scpred_adj_np = np.load('/home/ce/data/vg/conf_mat_freq_train_sccluster_pred.npy')
-            # scpred_adj_nor = torch_tensor(scpred_adj_np, dtype=torch_float32, device=CUDA_DEVICE, requires_grad=False)
-            # conf_superon = np.load('/home/ce/data/vg/conf_mat_superon.npy')
-            # conf_superon = torch_tensor(conf_superon, dtype=torch_float32, device=CUDA_DEVICE, requires_grad=False)
-            # conf_superto = np.load('/home/ce/data/vg/conf_mat_superto.npy')
-            # conf_superto = torch_tensor(conf_superto, dtype=torch_float32, device=CUDA_DEVICE, requires_grad=False)
-            # conf_superof = np.load('/home/ce/data/vg/conf_mat_superof.npy')
-            # conf_superof = torch_tensor(conf_superof, dtype=torch_float32, device=CUDA_DEVICE, requires_grad=False)
-
-            # 是否使用 BPL 方法在这里出现分歧，这两个层的结构都是一样的，所以不知道实际有什么作用，也许在初始化加载模型时参数的赋值会有所不同？
-            if with_clean_classifier:
-                pred_cls_logits = torch_mm(self.fc_output_proj_img_pred_clean(nodes_img_pred), self.fc_output_proj_ont_pred_clean(nodes_ont_pred).t()) # (i,j) 的值其实是两个 SP/CP 节点向量的内积，可当作相似度矩阵【但是它们模不等于1啊？存疑：写错了？】
-            else:
-                pred_cls_logits = torch_mm(self.fc_output_proj_img_pred(nodes_img_pred), self.fc_output_proj_ont_pred(nodes_ont_pred).t())
-
-            # 下面这段代码提出 if with_clean_classifier 外试试
-            # 在最后的时间步计算完毕后，开始计算分数和 SA 处理？
+            # 在最后的时间步计算完毕后，开始计算全局概率计算和 SA 处理
             if t == self.time_step_num - 1:
+                # 是否使用全新的 MLP 层作为最后的分类头，还是说使用来自 GB-Net 的分类头？
+                if with_clean_classifier:
+                    # (i,j) 的值其实是两个 SP/CP 节点向量的内积，可当作相似度矩阵【但是它们模不等于1啊？】
+                    pred_cls_logits = torch_mm(self.fc_output_proj_img_pred_clean(nodes_img_pred),
+                                               self.fc_output_proj_ont_pred_clean(nodes_ont_pred).t())
+                else:
+                    pred_cls_logits = torch_mm(self.fc_output_proj_img_pred(nodes_img_pred),
+                                               self.fc_output_proj_ont_pred(nodes_ont_pred).t())
+
                 index = torch_zeros(60 + 8, requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
                 index[0] = True
                 index[51] = True
@@ -399,16 +392,14 @@ class GGNN(Module):
                 index[57] = True
                 index[58] = True
                 index[59] = True
-                # scpred_cls_score = F_softmax((scpred_adj_nor @ pred_cls_logits[:, index].T).T, dim=1)
-                # superon_cls_score = F_softmax((conf_superon @ pred_cls_logits[:, 60:63].T).T, dim=1)
-                # superof_cls_score = F_softmax((conf_superof @ pred_cls_logits[:, 63:66].T).T, dim=1)
-                # superto_cls_score = F_softmax((conf_superto @ pred_cls_logits[:, 66:68].T).T, dim=1)
+
                 scpred_cls_score = F_softmax(pred_cls_logits[:, index], dim=1) # img_all_rels 对空关系和 9 个一级父级谓词的预测分数
                 superon_cls_score = F_softmax(pred_cls_logits[:, 60:63], dim=1) # img_all_rels 对二级父级谓词 superon1/2/3 的预测分数
                 superof_cls_score = F_softmax(pred_cls_logits[:, 63:66], dim=1) # img_all_rels 对二级父级谓词 superof1/2/3 的预测分数
                 superto_cls_score = F_softmax(pred_cls_logits[:, 66:68], dim=1) # img_all_rels 对二级父级谓词 superto1/2 的预测分数
                 pred_cls_logits = pred_cls_logits[:, :51] # 包含初始 51 个谓词【包含空关系】的相似度矩阵
-                # 这段代码非常重要，好像就是概率转移 adaptive refinement，使用概率转移矩阵的置换矩阵来进行查表；
+
+                # 这段代码非常重要，好像就是概率转移 adaptive refinement，又称为 SA(Semantic Adjustment)，使用混淆矩阵来进行概率转移
                 # 然后概率转移之后 pred_cls_logits 每行的概率之和不等于 1，所以需要归一化，应该就是下面的操作
                 if self.with_transfer:
                     pred_adj_np = np.load('/output/data/misc/conf_mat_updated.npy')  # 加载混淆矩阵
@@ -525,8 +516,6 @@ class GGNN(Module):
                 # 看到这里终于看懂了，rels 实际上会计算 68 个父子谓词的 logits，然后按照树状层级分别应用 Softmax 形成条件概率，用条件概率得出全局概率
                 # img_all_rels[i] 属于某个子谓词的概率 = 属于某个一级父级谓词的概率 * 属于某个二级父级谓词的概率 * 在属于某父级谓词的条件下，属于某个子谓词的概率
                 pred_cls_logits = pred_cls_logits * scpred_score.data * scpred2_score.data # 逐元素乘积
-                # print(pred_cls_logits.shape)
-                # print(pred_cls_logits.sum(dim=1))
 
                 # 其实就是 18 个一级/二级父级谓词的预测分数，横向拼接在一起，shape(img_all_rels, 18)
                 scpred_cls_score = torch_cat((scpred_cls_score, superon_cls_score, superof_cls_score, superto_cls_score), dim=1)
