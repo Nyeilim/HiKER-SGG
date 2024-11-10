@@ -370,17 +370,17 @@ class GGNN(Module):
             building = [22, 24, 65, 106]
             food = [5, 49, 86, 94]
 
+            # 是否使用全新的 MLP 层作为最后的分类头，还是说使用来自 GB-Net 的分类头？
+            if with_clean_classifier:
+                # (i,j) 的值其实是两个 SP/CP 节点向量的内积，可当作相似度矩阵【但是它们模不等于1啊？】
+                pred_cls_logits = torch_mm(self.fc_output_proj_img_pred_clean(nodes_img_pred),
+                                           self.fc_output_proj_ont_pred_clean(nodes_ont_pred).t())
+            else:
+                pred_cls_logits = torch_mm(self.fc_output_proj_img_pred(nodes_img_pred),
+                                           self.fc_output_proj_ont_pred(nodes_ont_pred).t())
+
             # 在最后的时间步计算完毕后，开始计算全局概率计算和 SA 处理
             if t == self.time_step_num - 1:
-                # 是否使用全新的 MLP 层作为最后的分类头，还是说使用来自 GB-Net 的分类头？
-                if with_clean_classifier:
-                    # (i,j) 的值其实是两个 SP/CP 节点向量的内积，可当作相似度矩阵【但是它们模不等于1啊？】
-                    pred_cls_logits = torch_mm(self.fc_output_proj_img_pred_clean(nodes_img_pred),
-                                               self.fc_output_proj_ont_pred_clean(nodes_ont_pred).t())
-                else:
-                    pred_cls_logits = torch_mm(self.fc_output_proj_img_pred(nodes_img_pred),
-                                               self.fc_output_proj_ont_pred(nodes_ont_pred).t())
-
                 index = torch_zeros(60 + 8, requires_grad=False, device=CUDA_DEVICE, dtype=torch_bool)
                 index[0] = True
                 index[51] = True
