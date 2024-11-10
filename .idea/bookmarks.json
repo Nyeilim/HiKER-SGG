@@ -2,27 +2,27 @@
   "HiKER-SGG": [
     {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 411,
+      "linenumber": 415,
       "name": "SA: 概率转移代码",
       "bookmarkType": "DIGIT_1"
+    },
+    {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 257,
+      "name": "BPL\u0026SA: 成员变量赋值给局部变量",
+      "bookmarkType": "LETTER_B"
+    },
+    {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 186,
+      "name": "BPL: Init 阶段创建独属于 BPL 方法的 MLP 层以及加载混淆矩阵",
+      "bookmarkType": "LETTER_C"
     },
     {
       "fileDescriptor": "$/dataloaders/visual_genome.py",
       "linenumber": 492,
       "name": "BPL: 加载数据集平衡",
       "bookmarkType": "DIGIT_2"
-    },
-    {
-      "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 184,
-      "name": "BPL: Init 阶段创建独属于 BPL 方法的 MLP 层以及加载混淆矩阵",
-      "bookmarkType": "LETTER_C"
-    },
-    {
-      "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 255,
-      "name": "BPL\u0026SA: 成员变量赋值给局部变量",
-      "bookmarkType": "LETTER_B"
     },
     {
       "fileDescriptor": "$/lib/my_ggnn_10.py",

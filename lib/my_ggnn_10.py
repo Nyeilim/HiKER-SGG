@@ -53,6 +53,8 @@ class GGNN(Module):
         self.fold_eoa = config.MODEL.FOLD_EOA
         self.merge_eoa_sa = config.MODEL.MERGE_EOA_SA
 
+        self.normalize_classifier = True
+
         if self.use_lrga is True:
             self.attention = ModuleList()
             self.dimension_reduce = ModuleList()
@@ -372,17 +374,19 @@ class GGNN(Module):
 
             # 是否使用全新的 MLP 层作为最后的分类头，还是说使用来自 GB-Net 的分类头？
             if with_clean_classifier:
-                norm_img_pred_fc = self.fc_output_proj_img_pred_clean(nodes_img_pred)
+                nodes_img_pred_fc = self.fc_output_proj_img_pred_clean(nodes_img_pred)
                 nodes_ont_pred_fc = self.fc_output_proj_ont_pred_clean(nodes_ont_pred)
             else:
-                norm_img_pred_fc = self.fc_output_proj_img_pred(nodes_img_pred)
+                nodes_img_pred_fc = self.fc_output_proj_img_pred(nodes_img_pred)
                 nodes_ont_pred_fc = self.fc_output_proj_ont_pred(nodes_ont_pred)
 
             # 计算模并归一化
-            nodes_img_pred_normalized = norm_img_pred_fc / torch.norm(norm_img_pred_fc, dim=1, keepdim=True)
-            nodes_ont_pred_normalized = nodes_ont_pred_fc / torch.norm(nodes_ont_pred_fc, dim=1, keepdim=True)
+            if self.normalize_classifier:
+                nodes_img_pred_fc = nodes_img_pred_fc / torch.norm(nodes_img_pred_fc, dim=1, keepdim=True)
+                nodes_ont_pred_fc = nodes_ont_pred_fc / torch.norm(nodes_ont_pred_fc, dim=1, keepdim=True)
+
             # (i,j) 的值其实是两个 SP/CP 节点向量的内积，可当作相似度矩阵
-            pred_cls_logits = torch_mm(nodes_img_pred_normalized,nodes_ont_pred_normalized.t())
+            pred_cls_logits = torch_mm(nodes_img_pred_fc,nodes_ont_pred_fc.t())
 
             # 在最后的时间步计算完毕后，开始计算全局概率计算和 SA 处理
             if t == self.time_step_num - 1:
