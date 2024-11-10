@@ -370,22 +370,19 @@ class GGNN(Module):
             building = [22, 24, 65, 106]
             food = [5, 49, 86, 94]
 
-            # 计算模
-            norm_img_pred = torch.norm(nodes_img_pred, dim=1, keepdim=True)
-            norm_ont_pred = torch.norm(nodes_ont_pred, dim=1, keepdim=True)
-
-            # 归一化
-            nodes_img_pred_normalized = nodes_img_pred / norm_img_pred
-            nodes_ont_pred_normalized = nodes_ont_pred / norm_ont_pred
-
             # 是否使用全新的 MLP 层作为最后的分类头，还是说使用来自 GB-Net 的分类头？
             if with_clean_classifier:
-                # (i,j) 的值其实是两个 SP/CP 节点向量的内积，可当作相似度矩阵【但是它们模不等于1啊？】
-                pred_cls_logits = torch_mm(self.fc_output_proj_img_pred_clean(nodes_img_pred_normalized),
-                                           self.fc_output_proj_ont_pred_clean(nodes_ont_pred_normalized).t())
+                norm_img_pred_fc = self.fc_output_proj_img_pred_clean(nodes_img_pred)
+                nodes_ont_pred_fc = self.fc_output_proj_ont_pred_clean(nodes_ont_pred)
             else:
-                pred_cls_logits = torch_mm(self.fc_output_proj_img_pred(nodes_img_pred_normalized),
-                                           self.fc_output_proj_ont_pred(nodes_ont_pred_normalized).t())
+                norm_img_pred_fc = self.fc_output_proj_img_pred(nodes_img_pred)
+                nodes_ont_pred_fc = self.fc_output_proj_ont_pred(nodes_ont_pred)
+
+            # 计算模并归一化
+            nodes_img_pred_normalized = norm_img_pred_fc / torch.norm(norm_img_pred_fc, dim=1, keepdim=True)
+            nodes_ont_pred_normalized = nodes_ont_pred_fc / torch.norm(nodes_ont_pred_fc, dim=1, keepdim=True)
+            # (i,j) 的值其实是两个 SP/CP 节点向量的内积，可当作相似度矩阵
+            pred_cls_logits = torch_mm(nodes_img_pred_normalized,nodes_ont_pred_normalized.t())
 
             # 在最后的时间步计算完毕后，开始计算全局概率计算和 SA 处理
             if t == self.time_step_num - 1:
