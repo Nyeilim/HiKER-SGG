@@ -380,7 +380,7 @@ class GGNN(Module):
                 nodes_img_pred_fc = self.fc_output_proj_img_pred(nodes_img_pred)
                 nodes_ont_pred_fc = self.fc_output_proj_ont_pred(nodes_ont_pred)
 
-            # 计算模并归一化
+            # 计算模并归一化，不要进行归一化，他会让你的指标降 20 个点！
             if self.normalize_classifier:
                 nodes_img_pred_fc = nodes_img_pred_fc / torch.norm(nodes_img_pred_fc, dim=1, keepdim=True)
                 nodes_ont_pred_fc = nodes_ont_pred_fc / torch.norm(nodes_ont_pred_fc, dim=1, keepdim=True)
