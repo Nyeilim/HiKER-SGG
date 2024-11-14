@@ -1,10 +1,10 @@
 {
   "HiKER-SGG": [
     {
-      "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 255,
-      "name": "BPL\u0026SA: 成员变量赋值给局部变量",
-      "bookmarkType": "LETTER_B"
+      "fileDescriptor": "$/dataloaders/visual_genome.py",
+      "linenumber": 492,
+      "name": "BPL: 加载数据集平衡",
+      "bookmarkType": "DIGIT_2"
     },
     {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
@@ -14,15 +14,15 @@
     },
     {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 255,
+      "name": "BPL\u0026SA: 成员变量赋值给局部变量",
+      "bookmarkType": "LETTER_B"
+    },
+    {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
       "linenumber": 34,
       "name": "BPL\u0026SA: 外部变量赋值给成员变量",
       "bookmarkType": "LETTER_A"
-    },
-    {
-      "fileDescriptor": "$/dataloaders/visual_genome.py",
-      "linenumber": 492,
-      "name": "BPL: 加载数据集平衡",
-      "bookmarkType": "DIGIT_2"
     },
     {
       "fileDescriptor": "$/lib/exp/train_fn.py",

@@ -63,12 +63,15 @@ background = [0]
 scent_list = [background, part, artifact, person, clothes, vehicle, flora, location,
               furniture, animal, structure, building, food]  # 13 个
 
-
+# pred_cls_logits.shape(img_all_rels, 68)
 def hierarchical_pred_reasoning(pred_cls_logits, use_sa):
     scpred_index = [0, *range(51, 60)]
-    scpred_cls_score = fn.softmax(pred_cls_logits[:, scpred_index], dim=1)  # img_all_rels 中每个关系对 10 个一级超类谓词【包含空关系】的预测分数
-    scpred2_cls_score = fn.softmax(pred_cls_logits[:, 60:68], dim=1)  # img_all_rels 中每个关系对 8 个二级超类谓词的预测分数
-    pred_cls_logits = pred_cls_logits[:, :51]  # 包含初始 51 个谓词【包含空关系】的相似度矩阵
+    scpred_cls_score = fn.softmax(pred_cls_logits[:, scpred_index], dim=1)  # 每个关系对 10 个一级超类谓词【包含空关系】的预测分数汇总，总和为 1
+    superon_cls_score = fn.softmax(pred_cls_logits[:, 60:63], dim=1)  # 每个关系对二级父级谓词 superon1/2/3 的预测分数
+    superof_cls_score = fn.softmax(pred_cls_logits[:, 63:66], dim=1)  # 每个关系对二级父级谓词 superof1/2/3 的预测分数
+    superto_cls_score = fn.softmax(pred_cls_logits[:, 66:68], dim=1)  # 每个关系对二级父级谓词 superto1/2 的预测分数
+    scpred2_cls_score = torch.cat((superon_cls_score, superof_cls_score, superto_cls_score), dim=1)  # 每个关系对 8 个二级超类谓词的预测分数汇总，总和为 3
+    pred_cls_logits = pred_cls_logits[:, :51]  # 包含初始 51 个谓词【包含空关系】的相似度信息的矩阵
 
     # 这段代码就是概率转移 adaptive refinement，又称为 SA(Semantic Adjustment)，使用混淆矩阵来进行概率转移
     if use_sa:
@@ -101,7 +104,7 @@ def hierarchical_pred_reasoning(pred_cls_logits, use_sa):
         pred_cls_cond_score[:, smallest_scpred] = fn.softmax(pred_cls_logits[:, smallest_scpred], dim=1).type(
             torch.float32)
 
-    # img_all_rels 中每个关系实际上会计算 68 个父子谓词的 logits，然后按照树状层级分别应用 Softmax 形成条件概率，用条件概率得出全局概率
+    # 每个关系实际上会计算 68 个父子谓词的 logits，然后按照树状层级分别应用 Softmax 形成条件概率，用条件概率得出全局概率
     # 某个关系属于某个子谓词的概率 = 属于某个一级超类谓词的概率 * 属于某个二级超类谓词的概率 * 属于某最小超类的条件下，属于某个子谓词的条件概率
     pred_cls_score = scpred_score * scpred2_score * pred_cls_cond_score  # 逐元素乘积
 
