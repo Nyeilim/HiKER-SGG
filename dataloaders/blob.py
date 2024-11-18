@@ -67,7 +67,7 @@ class Blob(object):
         :return:
         """
         tmp_rels = d['gt_relations']
-        assert not all(rel[2] == -1 for rel in tmp_rels)
+        assert not all(rel[2] == -1 for rel in tmp_rels), d
 
         i = len(self.imgs) # imgs 是已经处理完成的图片 List；所以这里可以理解成，此轮处理的是第几张图片，从 0 开始
         self.imgs.append(d['img'])
