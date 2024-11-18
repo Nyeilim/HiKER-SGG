@@ -73,6 +73,8 @@ def add_potential_bg_rels(im_inds, gt_boxes, gt_rels, image_offset):
 
         if num_bg < is_bgcand.size(0):
             bg_rels = random_choose(bg_rels, num_bg)
+
+        fg_rels = fg_rels[fg_rels[:, 3] != -1] # 使用布尔索引，移除前景关系中谓词为 -1:redundant_pred 的关系
         rel_labels = torch.cat((fg_rels, bg_rels), 0) # 合并前景关系与背景关系，作为最后的返回值
     else:
         rel_labels = fg_rels
