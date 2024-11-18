@@ -303,6 +303,9 @@ class ObjectDetector(nn.Module):
             fmap, im_sizes, image_offset, gt_boxes, gt_classes, gt_rels, train_anchor_inds, proposals=proposals
         )
 
+        # 移除 rel_labels 中谓词为 -1 的关系
+        rel_labels = [rel for rel in rel_labels if rel[3] != -1]
+
         # import pdb; pdb.set_trace()
         # Now classify them
         obj_fmap = self.obj_feature_map(fmap, rois)

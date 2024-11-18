@@ -24,7 +24,12 @@ def proposal_assignments_gtbox(rois, gt_boxes, gt_classes, gt_rels, image_offset
         rel_labels: [num_rels, 4] (img ind, box0 ind, box1 ind, rel type)
     """
     im_inds = rois[:,0].long()
+    labels = gt_classes[:,1].contiguous()
+    rel_labels = add_potential_bg_rels(im_inds, gt_boxes, gt_rels, image_offset)
 
+    return rois, labels, rel_labels
+
+def add_potential_bg_rels(im_inds, gt_boxes, gt_rels, image_offset):
     num_im = im_inds[-1] + 1
 
     # Offset the image indices in fg_rels to refer to absolute indices (not just within img i)
@@ -48,10 +53,6 @@ def proposal_assignments_gtbox(rois, gt_boxes, gt_classes, gt_rels, image_offset
     # labels = torch.stack((labels, salience_labels), 1)
 
     # Add in some BG labels
-
-    # NOW WE HAVE TO EXCLUDE THE FGs.
-    # TODO: check if this causes an error if many duplicate GTs havent been filtered out
-
     is_cand.view(-1)[fg_rels[:,1]*im_inds.size(0) + fg_rels[:,2]] = 0 # 排除已存在的前景关系 fg_rels
     is_bgcand = is_cand.nonzero() # 把最后的非 0 项拿到，就是 roi 之间可能存在的背景关系
     # TODO: make this sample on a per image case
@@ -76,12 +77,10 @@ def proposal_assignments_gtbox(rois, gt_boxes, gt_classes, gt_rels, image_offset
     else:
         rel_labels = fg_rels
 
-
     # last sort by rel. 按图像索引、第一个对象索引和第二个对象索引排序。
     _, perm = torch.sort(rel_labels[:, 0]*(gt_boxes.size(0)**2) +
                          rel_labels[:,1]*gt_boxes.size(0) + rel_labels[:,2])
 
     rel_labels = rel_labels[perm].contiguous() # 显存中密集排列
 
-    labels = gt_classes[:,1].contiguous()
-    return rois, labels, rel_labels
+    return rel_labels

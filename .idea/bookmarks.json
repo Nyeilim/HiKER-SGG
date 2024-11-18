@@ -1,22 +1,22 @@
 {
   "HiKER-SGG": [
     {
-      "fileDescriptor": "$/dataloaders/visual_genome.py",
-      "linenumber": 485,
-      "name": "BPL: 加载数据集平衡",
-      "bookmarkType": "DIGIT_2"
-    },
-    {
       "fileDescriptor": "$/lib/object_detector.py",
-      "linenumber": 349,
+      "linenumber": 352,
       "name": "Detector 的返回值",
       "bookmarkType": "LETTER_I"
     },
     {
       "fileDescriptor": "$/lib/object_detector.py",
-      "linenumber": 225,
+      "linenumber": 224,
       "name": "扩充背景关系",
       "bookmarkType": "LETTER_D"
+    },
+    {
+      "fileDescriptor": "$/dataloaders/visual_genome.py",
+      "linenumber": 485,
+      "name": "BPL: 加载数据集平衡",
+      "bookmarkType": "DIGIT_2"
     },
     {
       "fileDescriptor": "$/lib/exp/train_fn.py",
