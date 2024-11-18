@@ -574,8 +574,9 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
                         rel_i_root[2] = -1
                         rel_temp.append(rel_i_root)
 
-            # 去除仅包含多余头部谓词的图片样本，实际上并不能完全去除，因为某些尾部谓词可能在后续的过滤中被去掉，导致该图片仍只留下多余头部谓词
-            # 需要在 Blob.append 处也添加断言
+            # 去除仅包含多余头部谓词的图片样本，实际上并不能完全去除，需要在 Blob.append 处也添加断言；
+            # 因为某些尾部谓词可能在后续的过滤中被去掉，导致该图片仍只留下多余头部谓词
+            # 可断点观察 image_index[i] == 35124 的样本，它在 Blob.append() 的信息为 'index': 9016, 'fn': '/root/VG_100K/2386175.jpg'
             if all(rel[2] == -1 for rel in rel_temp):
                 split_mask[image_index[i]] = 0  # 训练集中大量仅包含头部谓词的样本会在执行 BPL 方法后于这行被剔除
                 continue
@@ -612,22 +613,19 @@ def load_info(info_file):
 
     return ind_to_classes, ind_to_predicates
 
-
-def vg_collate(data, num_gpus=3, is_train=False, mode='det'):
-    assert mode in ('det', 'rel')
-    blob = Blob(mode=mode, is_train=is_train, num_gpus=num_gpus,
-                batch_size_per_gpu=len(data) // num_gpus)
-    for d in data:
-        blob.append(d)
-    blob.reduce() # 将成员变量中的各种 List，不再按照图片索引分组，而是全部堆叠成连续的 Tensor
-    return blob
-
-
 class VGDataLoader(DataLoader):
     """
     Iterates through the data, filtering out None,
      but also loads everything as a (cuda) variable
     """
+
+    def __iter__(self):
+        iterator = super().__iter__()
+        while True:
+            blob = next(iterator) # 这里接收到的是 vg_collate 的返回值
+            if blob is None:
+                continue  # 跳过无效的批次
+            yield blob
 
     @classmethod
     def splits(cls, train_data, val_data, batch_size=3, num_workers=1, num_gpus=3, mode='det',
@@ -653,3 +651,24 @@ class VGDataLoader(DataLoader):
             **kwargs,
         )
         return train_load, val_load
+
+def vg_collate(data, num_gpus=3, is_train=False, mode='det'):
+    assert mode in ('det', 'rel')
+
+    # 筛选
+    filtered_data = []
+    for d in data:
+        tmp_rels = d['gt_relations']
+        if not all(rel[2] == -1 for rel in tmp_rels): # 不全为冗余谓词
+            filtered_data.append(d)
+    data = filtered_data
+    if len(data) == 0: # 此批次无可用数据
+        return None
+
+    # 组装
+    blob = Blob(mode=mode, is_train=is_train, num_gpus=num_gpus,
+                batch_size_per_gpu=len(data) // num_gpus)
+    for d in data:
+        blob.append(d)
+    blob.reduce() # 将成员变量中的各种 List，不再按照图片索引分组，而是全部堆叠成连续的 Tensor
+    return blob
