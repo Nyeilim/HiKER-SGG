@@ -622,10 +622,13 @@ class VGDataLoader(DataLoader):
     def __iter__(self):
         iterator = super().__iter__()
         while True:
-            blob = next(iterator) # 这里接收到的是 vg_collate 的返回值
-            if blob is None:
-                continue  # 跳过无效的批次
-            yield blob
+            try:
+                blob = next(iterator) # 这里接收到的是 vg_collate 的返回值
+                if blob is None:
+                    continue  # 跳过无效的批次
+                yield blob
+            except StopIteration:
+                break  # 捕获 StopIteration 异常并退出循环
 
     @classmethod
     def splits(cls, train_data, val_data, batch_size=3, num_workers=1, num_gpus=3, mode='det',
