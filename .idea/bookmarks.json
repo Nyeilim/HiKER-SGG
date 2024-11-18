@@ -1,6 +1,12 @@
 {
   "HiKER-SGG": [
     {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 257,
+      "name": "BPL\u0026SA: 成员变量赋值给局部变量",
+      "bookmarkType": "LETTER_B"
+    },
+    {
       "fileDescriptor": "$/lib/object_detector.py",
       "linenumber": 349,
       "name": "Detector 的返回值",
@@ -29,12 +35,6 @@
       "linenumber": 181,
       "name": "BPL: Init 阶段创建独属于 BPL 方法的 MLP 层以及加载混淆矩阵",
       "bookmarkType": "LETTER_C"
-    },
-    {
-      "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 255,
-      "name": "BPL\u0026SA: 成员变量赋值给局部变量",
-      "bookmarkType": "LETTER_B"
     },
     {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
