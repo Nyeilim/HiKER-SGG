@@ -226,8 +226,8 @@ class GGNN(Module):
             original_vr = vr.clone()
 
         # SGG 图上的边
-        assert torch.all(0 <= rel_inds[:, 0] < num_img_ent)
-        assert torch.all(0 <= rel_inds[:, 1] < num_img_ent)
+        assert torch.all((0 <= rel_inds[:, 0]) & (rel_inds[:, 0] <= 2))
+        assert torch.all((0 <= rel_inds[:, 0]) & (rel_inds[:, 0] <= 2))
         edges_img_pred2subj = torch.zeros((num_img_pred, num_img_ent), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
         edges_img_pred2subj[arange(num_img_pred), rel_inds[:, 0]] = 1 # 使用这个矩阵，对于某个特定的 SP 节点【行】，我们可以找到其 CE Subject【列】
         edges_img_pred2obj = torch.zeros((num_img_pred, num_img_ent), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
