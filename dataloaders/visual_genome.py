@@ -577,6 +577,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
                 split_mask[image_index[i]] = 0  # 训练集中大量仅包含头部谓词的样本会在执行 BPL 方法后于这行被剔除
                 continue
             else:
+                assert any(rel[2] != -1 for rel in rel_temp)
                 rels = np_array(rel_temp, dtype=np_int32)   # 将 rel_temp 转正为 rels
 
         # 把此图中拿到的 bbox 和 rel 添加到总列表，开始处理下张图片

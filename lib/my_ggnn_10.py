@@ -238,7 +238,7 @@ class GGNN(Module):
         # Bridge Edge 桥边
         ## SE/CE 之间的桥边，使用独热编码的标注，作为邻接矩阵的值；使用该矩阵，对于某个特定的 SE 节点，我们可以找到其 CE 节点
         edges_img2ont_ent = torch.zeros((num_img_ent, self.num_ont_ent), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
-        edges_img2ont_ent[:, :151] = obj_probs.clone().detach() # 
+        edges_img2ont_ent[:, :151] = obj_probs.clone().detach()
         edges_ont2img_ent = edges_img2ont_ent.t()
         ## SP/CP 之间的桥边，SP/CP 的邻接矩阵未进行初始化；使用该矩阵，对于某个特定的 SP 节点，我们可以找到其 CP 节点
         edges_img2ont_pred = torch.zeros((num_img_pred, self.num_ont_pred), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
