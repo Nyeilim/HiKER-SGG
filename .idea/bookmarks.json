@@ -1,6 +1,12 @@
 {
   "HiKER-SGG": [
     {
+      "fileDescriptor": "$/dataloaders/blob.py",
+      "linenumber": 95,
+      "name": "锚框预处理",
+      "bookmarkType": "LETTER_H"
+    },
+    {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
       "linenumber": 257,
       "name": "BPL\u0026SA: 成员变量赋值给局部变量",
@@ -59,12 +65,6 @@
       "linenumber": 356,
       "name": "分发样本",
       "bookmarkType": "LETTER_F"
-    },
-    {
-      "fileDescriptor": "$/dataloaders/blob.py",
-      "linenumber": 93,
-      "name": "锚框预处理",
-      "bookmarkType": "LETTER_H"
     },
     {
       "fileDescriptor": "$/lib/my_model_24.py",

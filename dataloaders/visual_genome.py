@@ -573,7 +573,10 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
                         # 多余的头部谓词将其标记为 -1 redundant_pred，意为冗余谓词
                         rel_i_root[2] = -1
                         rel_temp.append(rel_i_root)
-            if all(rel[2] == -1 for rel in rel_temp): # 去除仅包含多余头部谓词的图片样本
+
+            # 去除仅包含多余头部谓词的图片样本，实际上并不能完全去除，因为某些尾部谓词可能在后续的过滤中被去掉，导致该图片仍只留下多余头部谓词
+            # 需要在 Blob.append 处也添加断言
+            if all(rel[2] == -1 for rel in rel_temp):
                 split_mask[image_index[i]] = 0  # 训练集中大量仅包含头部谓词的样本会在执行 BPL 方法后于这行被剔除
                 continue
             else:
