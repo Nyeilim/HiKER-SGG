@@ -125,9 +125,8 @@ def proposal_assignments_postnms(
         )))
         num_box_seen += boxes_i.size
 
-    rois = torch.FloatTensor(np.concatenate(rois, 0)).cuda(gt_boxes.get_device(), async=True)
-    labels = torch.LongTensor(np.concatenate(obj_labels, 0)).cuda(gt_boxes.get_device(), async=True)
-    rel_labels = torch.LongTensor(np.concatenate(rel_labels, 0)).cuda(gt_boxes.get_device(),
-                                                                      async=True)
+    rois = torch.FloatTensor(np.concatenate(rois, 0)).cuda(gt_boxes.get_device())
+    labels = torch.LongTensor(np.concatenate(obj_labels, 0)).cuda(gt_boxes.get_device())
+    rel_labels = torch.LongTensor(np.concatenate(rel_labels, 0)).cuda(gt_boxes.get_device())
 
     return rois, labels, rel_labels

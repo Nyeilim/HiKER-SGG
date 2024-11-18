@@ -22,15 +22,12 @@ from torchvision.transforms import Resize, Compose, ToTensor, Normalize
 from pycocotools.coco import COCO
 from dataloaders.blob import Blob
 from lib.fpn.box_intersections_cpu.bbox import bbox_overlaps
-from config import VG_IMAGES, IM_DATA_FN, VG_SGG_FN, VG_SGG_DICT_FN, BOX_SCALE, IM_SCALE, PROPOSAL_FN
+from config import VG_IMAGES, IM_DATA_FN, VG_SGG_FN, VG_SGG_DICT_FN, BOX_SCALE, IM_SCALE, PROPOSAL_FN, BPL_LIMIT
 from dataloaders.image_transforms import SquarePad, Grayscale, Brightness, Sharpness, Contrast, \
     RandomOrder, Hue, random_crop
 from PIL import ImageDraw
 from .corruptions import gaussian_noise, shot_noise, impulse_noise, defocus_blur, glass_blur, zoom_blur, motion_blur, snow, frost, fog, brightness, contrast, elastic_transform, pixelate, jpeg_compression, speckle_noise, gaussian_blur, spatter, saturate, sunglare, waterdrop, wildfire_smoke, rain, dust
 import matplotlib.pyplot as plt
-
-
-PRINTING = int(os_environ.get('printing', False))
 
 
 class VG(Dataset):
@@ -284,7 +281,6 @@ class VG(Dataset):
             image_unpadded = image_unpadded.transpose(Image_FLIP_LEFT_RIGHT)
             gt_boxes[:, [0, 2]] = scaled_w - gt_boxes[:, [2, 0]]
 
-        if PRINTING: print(f'visual_genome: before: (w, h) = {(w, h)}')
         img_scale_factor = IM_SCALE / max_side
         if h > w:
             im_size = (IM_SCALE, int(w * img_scale_factor), img_scale_factor)
@@ -293,7 +289,6 @@ class VG(Dataset):
         else:
             im_size = (IM_SCALE, IM_SCALE, img_scale_factor)
 
-        if PRINTING: print(f'visual_genome: after: im_size = {im_size}')
         gt_rels = self.relationships[index].copy()  # 获取关系（三元组）
         # 使用 Set 过滤掉重复关系
         if self.filter_duplicate_rels:
@@ -341,8 +336,6 @@ class VG(Dataset):
     def num_classes(self):
         return len(self.ind_to_classes)
 
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # MISC. HELPER FUNCTIONS ~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -550,14 +543,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
 
         # 下面这段就是 BPL 算法的内容
         if root_classes is not None and mode == 'train':
-            # print('old boxes: ', boxes_i)
-            # print('old gt_classes_i: ', gt_classes_i)
-            # print('old rels: ', rels)
             rel_temp = []
-            boxmap_old2new = {}
-            box_num = 0
-            retain_box = []
-            # print('rels: ',rels)
             # 遍历此图中的每个关系，并根据其属于头部谓词还是尾部谓词，执行不同逻辑，判断将其是否加入 rel_temp
             for rel_i in rels:
                 rel_i_pred = ind_to_predicates[rel_i[2]] # 将谓词索引翻译成具体的谓词，比如 31 -> 'on'
@@ -565,83 +551,38 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
                 if rel_i_pred not in all_classes_count:
                     all_classes_count[rel_i_pred] = 0
                 all_classes_count[rel_i_pred] = all_classes_count[rel_i_pred] + 1
+
                 # rel_i_pred 作为尾部谓词或者“无关系”的逻辑，谓词索引 0 表示 'no_relationship'
                 if rel_i_pred not in root_classes or rel_i[2] == 0:
                     rel_i_leaf = rel_i  # 添加为尾部谓词
-
-                    # if rel_i[0] not in boxmap_old2new:
-                    # boxmap_old2new[rel_i[0]] = box_num
-                    # retain_box.append(rel_i[0])
-                    # box_num = box_num + 1
-                    # if rel_i[1] not in boxmap_old2new:
-                    # boxmap_old2new[rel_i[1]] = box_num
-                    # retain_box.append(rel_i[1])
-                    # box_num = box_num + 1
-                    # rel_i_new[0] = boxmap_old2new[rel_i[0]]
-                    # rel_i_new[1] = boxmap_old2new[rel_i[1]]
                     if rel_i_pred not in leaf_classes_count:
                         leaf_classes_count[rel_i_pred] = 0
                     leaf_classes_count[rel_i_pred] = leaf_classes_count[rel_i_pred] + 1 # 统计尾部谓词数
                     rel_temp.append(rel_i_leaf) # 添加该三元组（或者说关系）到临时列表，作为训练集的候选数据
+
                 # rel_i_pred 作为头部谓词的逻辑
                 if rel_i_pred in root_classes:
                     rel_i_root = rel_i
                     if rel_i_pred not in root_classes_count:
                         root_classes_count[rel_i_pred] = 0
                     # 这里人为限定：包含某个头部谓词的三元组，其样本数量不能超过 1000
-                    if root_classes_count[rel_i_pred] < 1000: # Adjust the intensity of BPL here
+                    if root_classes_count[rel_i_pred] < BPL_LIMIT: # Adjust the intensity of BPL here
                         rel_temp.append(rel_i_root)
                         root_classes_count[rel_i_pred] = root_classes_count[rel_i_pred] + 1
-            if len(rel_temp) == 0:
+                    else:
+                        # 多余的头部谓词将其标记为 -1 redundant_pred，意为冗余谓词
+                        rel_i_root[2] = -1
+                        rel_temp.append(rel_i_root)
+            if all(rel[2] == -1 for rel in rel_temp): # 去除仅包含多余头部谓词的图片样本
                 split_mask[image_index[i]] = 0  # 训练集中大量仅包含头部谓词的样本会在执行 BPL 方法后于这行被剔除
                 continue
             else:
                 rels = np_array(rel_temp, dtype=np_int32)   # 将 rel_temp 转正为 rels
 
-            # retain_box = np.array(retain_box, dtype=np.int64)
-            # boxes_i = boxes_i[retain_box]
-            # gt_classes_i = gt_classes_i[retain_box]
-            # gt_attributes_i = gt_attributes_i[retain_box]
-
         # 把此图中拿到的 bbox 和 rel 添加到总列表，开始处理下张图片
         boxes.append(boxes_i)
         gt_classes.append(gt_classes_i)
-        # gt_attributes.append(gt_attributes_i)
         relationships.append(rels)
-
-    # 打印信息
-    if PRINTING: print('mode: ',mode)
-    if PRINTING: print('root_classes_count: ', root_classes_count)
-    count_list = [0,]
-    for i in root_classes_count:
-        count_list.append(root_classes_count[i])
-    if PRINTING: print('mean root class number: ', np_array(count_list).mean())
-    if PRINTING: print('sum root class number: ', np_array(count_list).sum())
-
-    if PRINTING: print('leaf_classes_count: ', leaf_classes_count)
-    count_list = [0,]
-    for i in leaf_classes_count:
-        count_list.append(leaf_classes_count[i])
-    if PRINTING: print('mean leaf class number: ', np_array(count_list).mean())
-    if PRINTING: print('sum leaf class number: ', np_array(count_list).sum())
-    # clean_classes_count = {}
-    # clean_classes_count = root_classes_count.copy()
-    # clean_classes_count.update(leaf_classes_count)
-    # with open("./misc/clean_classes_count.json", "w") as dump_f:
-    #     print('save clean_classes_count')
-    #     json.dump(clean_classes_count, dump_f)
-    if PRINTING: print('all_classes_count: ', all_classes_count)
-    count_list = [0,]
-    for i in all_classes_count:
-        count_list.append(all_classes_count[i])
-    # if split == 'train':
-    #     with open("./misc/all_predicate_count.json", "w") as dump_f:
-    #         print('save all_classes_count')
-    #         json.dump(all_classes_count, dump_f)
-    #     os._exit(0)
-    if PRINTING: print('mean all class number: ', np_array(count_list).mean())
-    if PRINTING: print('sum all class number: ', np_array(count_list).sum())
-    if PRINTING: print('number images: ', split_mask.sum())
 
     return split_mask, boxes, gt_classes, relationships
 

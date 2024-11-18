@@ -10,12 +10,10 @@ from tqdm import tqdm
 sys.path.append("/output/HiKER-SGG/")
 
 from config import ModelConfig, BOX_SCALE, IM_SCALE
-from lib.torchinfo import summary
 from lib.exp.exp_util import load_best_matrices
 from lib.pytorch_misc import optimistic_restore
 # 如果把 sg_val 放在 my_model_24, visual_genome 后面就会导入报错，因为里面有个很重要的 setup 语句能导入 lib.fpn.box_intersections_cpu.bbox
 from lib.evaluation.sg_eval import BasicSceneGraphEvaluator, calculate_mR_from_evaluator_list, eval_entry
-from lib.pytorch_misc import print_para
 from dataloaders.visual_genome import VGDataLoader, VG
 
 from lib.my_model_24 import KERN
@@ -25,7 +23,7 @@ codebase = '/output/HiKER-SGG/'
 exp_name = 'hikersgg_predcls_test'
 write = tqdm.write  # 函数引用赋值，用来打印日志
 use_bpl = True # 启用还是关闭 BPL 方法
-use_sa = False # 启用还是关闭 SA 方法
+use_sa = True # 启用还是关闭 SA 方法
 test_epoch = load_best_matrices()['best_mr_epoch'] # 需要测试第几个 epoch 训练出来的模型
 print(f"Start test epoch {test_epoch}")
 
@@ -142,13 +140,4 @@ def val_epoch():
 ckpt = torch.load(conf.ckpt) # 加载参数文件
 optimistic_restore(detector, ckpt['state_dict'], skip_clean=False) # 参数导入模型中
 detector = detector.cuda() # 模型移至 CUDA
-
-# print(print_para(detector), flush=True) # 打印模型参数
-# print(detector) # 原生方法打印模型结构
-# 使用 torchinfo 打印模型信息
-# one_sample = next(iter(val_loader))
-# one_sample.scatter()
-# summary_data = [*one_sample[0]][:-1]
-# summary(detector, input_data=summary_data, col_names=("input_size", "output_size", "num_params"), row_settings=("depth","var_names"))
-
 recall, recall_mp, mean_recall, mean_recall_mp = val_epoch()  # 开始评估

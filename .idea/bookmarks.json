@@ -2,9 +2,27 @@
   "HiKER-SGG": [
     {
       "fileDescriptor": "$/dataloaders/visual_genome.py",
-      "linenumber": 492,
+      "linenumber": 485,
       "name": "BPL: 加载数据集平衡",
       "bookmarkType": "DIGIT_2"
+    },
+    {
+      "fileDescriptor": "$/lib/object_detector.py",
+      "linenumber": 349,
+      "name": "Detector 的返回值",
+      "bookmarkType": "LETTER_I"
+    },
+    {
+      "fileDescriptor": "$/lib/object_detector.py",
+      "linenumber": 225,
+      "name": "扩充背景关系",
+      "bookmarkType": "LETTER_D"
+    },
+    {
+      "fileDescriptor": "$/lib/exp/train_fn.py",
+      "linenumber": 65,
+      "name": "训练时前向传播的入口",
+      "bookmarkType": "LETTER_E"
     },
     {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
@@ -37,34 +55,16 @@
       "bookmarkType": "DIGIT_3"
     },
     {
-      "fileDescriptor": "$/lib/exp/train_fn.py",
-      "linenumber": 65,
-      "name": "训练时前向传播的入口",
-      "bookmarkType": "LETTER_E"
-    },
-    {
       "fileDescriptor": "$/lib/my_model_24.py",
       "linenumber": 356,
-      "name": "blob.scatter",
+      "name": "分发样本",
       "bookmarkType": "LETTER_F"
-    },
-    {
-      "fileDescriptor": "$/dataloaders/visual_genome.py",
-      "linenumber": 676,
-      "name": "blob.reduce",
-      "bookmarkType": "LETTER_G"
     },
     {
       "fileDescriptor": "$/dataloaders/blob.py",
       "linenumber": 93,
       "name": "锚框预处理",
       "bookmarkType": "LETTER_H"
-    },
-    {
-      "fileDescriptor": "$/lib/object_detector.py",
-      "linenumber": 349,
-      "name": "Detector 的返回值",
-      "bookmarkType": "LETTER_I"
     },
     {
       "fileDescriptor": "$/lib/my_model_24.py",

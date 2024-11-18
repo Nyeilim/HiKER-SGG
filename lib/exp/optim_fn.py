@@ -3,10 +3,10 @@ from apex.optimizers import FusedAdam, FusedSGD
 from lib.exp.global_var import detector, conf
 
 
-# 优化器
+# 优化器，用于执行梯度下降
 def get_optim(lr):
-    # Lower the learning rate on the VGG fully connected layers by 1/10th. It's a hack, but it helps
-    # stabilize the models.
+    # Lower the learning rate on the VGG fully connected layers by 1/10th.
+    # It's a hack, but it helps stabilize the models.
     fc_params = [p for n, p in detector.named_parameters() if
                  (n.startswith('roi_fmap') or 'clean' in n) and p.requires_grad]
     non_fc_params = [p for n, p in detector.named_parameters() if
@@ -18,4 +18,4 @@ def get_optim(lr):
     else:
         optimizer = FusedSGD(params, weight_decay=conf.l2, lr=lr, momentum=0.9)
 
-    return optimizer  # , scheduler
+    return optimizer

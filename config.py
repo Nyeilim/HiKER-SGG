@@ -27,6 +27,7 @@ VG_SGG_FN = stanford_metadata_path('VG-SGG.h5')
 VG_SGG_DICT_FN = stanford_metadata_path('VG-SGG-dicts.json')
 PROPOSAL_FN = stanford_metadata_path('proposals.h5')
 
+BPL_LIMIT = 1000
 # =============================================================================
 # =============================================================================
 

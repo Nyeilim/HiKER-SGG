@@ -256,12 +256,12 @@ class KERN(Module):
                                                 image_offset, filter_non_overlap=True,
                                                 num_sample_per_gt=1)
 
-        rel_inds = self.get_rel_inds(result.rel_labels, im_inds, boxes) # 取 rel_labels[:,:3]，每项即 [im_ind, subject, object]
+        rel_inds = self.get_rel_inds(result.rel_labels, im_inds, boxes) # 取 rel_labels[:,:3]，即 [im_ind, subject, object]
         rois = torch_cat((im_inds[:, None].float(), boxes), 1) # [:, None] 将 im_inds 从一维张量变为二维张量，把图片索引拼到 gt_boxes 前面去
 
         result.obj_fmap = self.obj_feature_map(result.fmap.detach(), rois) # 这个过 ROI Align 的操作在 Detector 里面就有，这里用 detach 禁用反向传播重做遍，目的是什么？
 
-        vr = self.visual_rep(result.fmap.detach(), rois, rel_inds[:, 1:])
+        vr = self.visual_rep(result.fmap.detach(), rois, rel_inds[:, 1:]) # 谓词的视觉特征，后面将作为 SP 节点特征
 
         # 调用 GGNN 进行预测，通过实例名调用 Callable 方法，也就是 forward 方法
         (result.rm_obj_dists, result.obj_preds, result.rel_dists,

@@ -221,9 +221,10 @@ class ObjectDetector(nn.Module):
         im_inds = gt_classes[:, 0] - image_offset
         rois = torch.cat((im_inds.float()[:, None], gt_boxes), 1) # 使用 [im_inds, gt_box] 当作 rois
         if gt_rels is not None and self.training:
+            # 以 gt_box 设置 rois 的回归目标和标签，扩充背景关系
             rois, labels, rel_labels = proposal_assignments_gtbox(
-                rois.data, gt_boxes.data, gt_classes.data, gt_rels.data, image_offset,
-                fg_thresh=0.5) # 以 gt_box 设置 rois 的回归目标和标签
+                rois.data, gt_boxes.data, gt_classes.data, gt_rels.data, image_offset, fg_thresh=0.5
+            )
         else:
             labels = gt_classes[:, 1]
             rel_labels = None
@@ -294,14 +295,13 @@ class ObjectDetector(nn.Module):
         :param proposals: things
         :param train_anchor_inds: a [num_train, 2] array of indices for the anchors that will
                                   be used to compute the training loss. Each (img_ind, fpn_idx)
-        :return: If train:
         """
         fmap = self.feature_map(x)
         # import pdb; pdb.set_trace()
         # Get boxes from RPN. 由于我们设置 mode:gtbox，因此这里会直接把 gt_boxes 当作我们的 roi，实际上并没有过 RPN 层；rois.shape(num_gt_boxes, 5)
-        rois, obj_labels, bbox_targets, rpn_scores, rpn_box_deltas, rel_labels = \
-            self.get_boxes(fmap, im_sizes, image_offset, gt_boxes,
-                           gt_classes, gt_rels, train_anchor_inds, proposals=proposals)
+        rois, obj_labels, bbox_targets, rpn_scores, rpn_box_deltas, rel_labels = self.get_boxes(
+            fmap, im_sizes, image_offset, gt_boxes, gt_classes, gt_rels, train_anchor_inds, proposals=proposals
+        )
 
         # import pdb; pdb.set_trace()
         # Now classify them
@@ -312,12 +312,12 @@ class ObjectDetector(nn.Module):
 
         od_box_priors = rois[:, 1:]
 
-        if (not self.training and not self.mode == 'gtbox') or self.mode in ('proposals', 'refinerels'): # 这个条件判断为 false 不会被执行
+        if ((not self.training and not self.mode == 'gtbox')
+                or self.mode in ('proposals', 'refinerels')): # 这个条件判断为 false 不会被执行
             nms_inds, nms_scores, nms_preds, nms_boxes_assign, nms_boxes, nms_imgs = self.nms_boxes(
-                od_obj_dists,
-                rois,
-                od_box_deltas, im_sizes,
+                od_obj_dists,rois,od_box_deltas, im_sizes
             )
+
             im_inds = nms_imgs + image_offset
             obj_dists = od_obj_dists[nms_inds]
             obj_fmap = obj_fmap[nms_inds]
