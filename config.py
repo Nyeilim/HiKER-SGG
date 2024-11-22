@@ -84,9 +84,11 @@ CONF_MAT_FREQ_TRAIN = data_path('misc/conf_mat_freq_train.npy')  # 初始的谓�
 CONF_MAT_UPDATED = data_path('misc/conf_mat_updated.npy')  # 途中由混淆矩阵计算出的谓词转移矩阵，用于 SA
 # =============================================================================
 # 全局变量
-BPL_LIMIT = 1000
+BPL_LIMIT = 1000 # BPL 单个谓词上限
 DIS_PROGRESS_BAR = True  # 是否禁用进度条
+ALPHA = 0.9 # 混淆矩阵更新权重
 MODES = ('sgdet', 'sgcls', 'predcls')
+DATALOADER_MODES = ('train', 'val', 'test', 'confusion_matrix_val')
 
 # EOA code left, useless now
 MODEL = Munch()
@@ -184,6 +186,7 @@ class ModelConfig(object):
         self.use_knowledge = False
         self.use_embedding = False
         self.refine_obj_cls = False
+        self.filter_duplicate_rels = False
 
         # self.MODEL = Munch()
         # self.MODEL.DEVICE = None
@@ -334,6 +337,7 @@ class ModelConfig(object):
         parser.add_argument('-use_knowledge', dest='use_knowledge', help='use ALL_EDGE file to initial predicate', action='store_true')
         parser.add_argument('-use_embedding', dest='use_embedding', help='use NODE_EMBEDDING to initial entity', action='store_true')
         parser.add_argument('-refine_obj_cls', dest='refine_obj_cls', help='add additional process towards entities in model', action='store_true')
+        parser.add_argument('-filter_duplicate_rels', dest='filter_duplicate_rels', help='filter out duplicate rels while loading dataset', action='store_true')
 
 
         return parser

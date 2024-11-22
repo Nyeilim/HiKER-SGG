@@ -3,16 +3,42 @@ from torch import no_grad as torch_no_grad
 from torch.cuda.amp import autocast
 from tqdm import tqdm
 
-from config import BOX_SCALE, IM_SCALE
+from config import BOX_SCALE, IM_SCALE, DIS_PROGRESS_BAR
 from lib.evaluation.sg_eval import BasicSceneGraphEvaluator, calculate_mr, eval_entry
-from lib.exp.global_var import conf, model, ind_to_predicates, val_loader, val
 
+def confusion_matrix_evaluate(model, conf, dataset, dataloader):
+    ind_to_predicates = dataset.ind_to_predicates
 
-def val_epoch(verbose=False):
     model.eval()
     evaluator_list = []  # for calculating recall of each relationship except no relationship
     evaluator_multiple_preds_list = []
+    for index, name in enumerate(ind_to_predicates):
+        if index == 0:
+            continue
+        evaluator_list.append((index, name, BasicSceneGraphEvaluator.all_modes()))
+        evaluator_multiple_preds_list.append((index, name, BasicSceneGraphEvaluator.all_modes(multiple_preds=True)))
+    evaluator = BasicSceneGraphEvaluator.all_modes()  # for calculating recall
+    evaluator_multiple_preds = BasicSceneGraphEvaluator.all_modes(multiple_preds=True)
 
+    # 该函数接收一个可迭代对象，返回一个行为与原对象相同的迭代器，但在每次请求值时打印动态更新的进度条。
+    prog_bar = tqdm(enumerate(dataloader), total=int(len(dataset) / dataloader.batch_size), disable = DIS_PROGRESS_BAR)
+
+    with torch_no_grad():
+        for batch_idx, batch in prog_bar:
+            val_batch(model, conf, dataset, conf.num_gpus * batch_idx, batch, evaluator, evaluator_multiple_preds, evaluator_list,
+                             evaluator_multiple_preds_list)
+            if batch_idx == 10000:  # For efficiency, only evaluate 10000 batches
+                break
+    confusion_matrix = evaluator[conf.mode].result_dict['predicate_confusion_matrix']
+    model.train()
+    return confusion_matrix
+
+def val_epoch(model, conf, val_set, val_set_loader):
+    ind_to_predicates = val_set.ind_to_predicates
+
+    model.eval()
+    evaluator_list = []  # for calculating recall of each relationship except no relationship
+    evaluator_multiple_preds_list = []
     # 为每个谓词创建两个评估器：单谓词评估器、多谓词评估器
     for index, name in enumerate(ind_to_predicates):
         if index == 0:
@@ -22,11 +48,11 @@ def val_epoch(verbose=False):
     evaluator = BasicSceneGraphEvaluator.all_modes()  # for calculating recall
     evaluator_multiple_preds = BasicSceneGraphEvaluator.all_modes(multiple_preds=True)
 
-    prog_bar = tqdm(enumerate(val_loader), total=int(len(val) / val_loader.batch_size), disable=not verbose)
+    prog_bar = tqdm(enumerate(val_set_loader), total=int(len(val_set) / val_set_loader.batch_size), disable=DIS_PROGRESS_BAR)
 
     with torch_no_grad():
-        for val_b, batch in prog_bar:
-            val_batch(conf.num_gpus * val_b, batch, evaluator, evaluator_multiple_preds, evaluator_list,
+        for batch_idx, batch in prog_bar:
+            val_batch(conf.num_gpus * batch_idx, batch, evaluator, evaluator_multiple_preds, evaluator_list,
                       evaluator_multiple_preds_list)
 
     # mp(multiple preds) == no constraint
@@ -40,7 +66,12 @@ def val_epoch(verbose=False):
     return recall, recall_mp, mean_recall, mean_recall_mp
 
 
-def val_batch(batch_num, batch, evaluator, evaluator_multiple_preds, evaluator_list, evaluator_multiple_preds_list):
+def val_batch(
+        model, conf, val, batch_num, batch,
+        evaluator, evaluator_multiple_preds,
+        evaluator_list, evaluator_multiple_preds_list
+):
+
     with autocast():
         det_res = model[batch]
     if conf.num_gpus == 1:

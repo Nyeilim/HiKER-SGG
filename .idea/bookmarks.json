@@ -1,6 +1,18 @@
 {
   "HiKER-SGG": [
     {
+      "fileDescriptor": "$/lib/exp/train_fn.py",
+      "linenumber": 47,
+      "name": "训练时前向传播的入口",
+      "bookmarkType": "LETTER_E"
+    },
+    {
+      "fileDescriptor": "$/lib/exp/train_fn.py",
+      "linenumber": 16,
+      "name": "打印进度条",
+      "bookmarkType": "LETTER_Z"
+    },
+    {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
       "linenumber": 258,
       "name": "BPL\u0026SA: 成员变量赋值给局部变量",
@@ -41,18 +53,6 @@
       "linenumber": 485,
       "name": "BPL: 加载数据集平衡",
       "bookmarkType": "DIGIT_2"
-    },
-    {
-      "fileDescriptor": "$/lib/exp/train_fn.py",
-      "linenumber": 65,
-      "name": "训练时前向传播的入口",
-      "bookmarkType": "LETTER_E"
-    },
-    {
-      "fileDescriptor": "$/lib/exp/train_fn.py",
-      "linenumber": 16,
-      "name": "打印进度条",
-      "bookmarkType": "LETTER_Z"
     },
     {
       "fileDescriptor": "$/lib/evaluation/sg_eval.py",

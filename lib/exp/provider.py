@@ -1,28 +1,76 @@
+import torch
+
+from config import ALL_EDGE, NODE_EMBEDDING, REL_COUNTS, DATALOADER_MODES
 from dataloaders.visual_genome import VG, VGDataLoader
+from lib.my_model_24 import KERN
+from lib.pytorch_misc import optimistic_restore
 
 
-def provide_dataloader(conf):
-    # 这里的 split 的目的好像是用来训练
-    # with_clean_classifier==True 表示使用 BPL Method
-    # 该方法出自论文 SGG-G2S; return size: 16832, 5000, 26446
+def provide_dataloader(conf, dataloader_mode):
+    assert dataloader_mode in DATALOADER_MODES
+
     train, val, test = VG.splits(
         num_val_im=conf.val_size,
-        filter_duplicate_rels=True,
+        filter_duplicate_rels=conf.filter_duplicate_rels,
         use_proposals=conf.use_proposals,
         filter_non_overlap=conf.mode == 'sgdet',
-        with_clean_classifier=conf.use_bpl,
-        get_state=False
+        with_clean_classifier=conf.use_bpl if dataloader_mode == 'train' else False,
     )
 
-    # 这里的两个集合经过 BPL 方法平衡后，会少很多头部谓词样本，在 SGG-G2S 的论文中拿来微调最后的层; return size: 2104, 5000
-    # 它的这个 train_loader 的大小其实反应的是 batch_sampler size，说白了就是批次个数，2104 = 16832/8
-    # batch_sampler 是一个可迭代的对象，它返回一系列的索引列表（batches），每个列表代表一个批次。batch_sampler 可以自定义如何从数据集中抽取批次。
+    if dataloader_mode == 'test':
+        val = test
+    elif dataloader_mode == 'confusion_matrix_val':
+        val = train
+
     train_loader, val_loader = VGDataLoader.splits(
         train,
         val,
         mode='rel',  # rel 会传给 Blob 当构造参数
         batch_size=conf.batch_size,
-        num_workers=conf.num_workers,
         num_gpus=conf.num_gpus,
-        pin_memory=True
+        num_workers=conf.num_workers
     )
+
+    if dataloader_mode == 'train':
+        return train, train_loader
+    else:
+        return val, val_loader
+
+
+def provide_model(conf, ind_to_classes, ind_to_predicates):
+    # 模型本体
+    model = KERN(
+        classes=ind_to_classes,
+        rel_classes=ind_to_predicates,
+        num_gpus=conf.num_gpus,
+        mode=conf.mode,
+        require_overlap_det=conf.require_overlap_det,
+        use_resnet=conf.use_resnet,
+        use_proposals=conf.use_proposals,
+        pooling_dim=conf.pooling_dim,
+        ggnn_rel_time_step_num=conf.ggnn_rel_time_step_num,
+        ggnn_rel_hidden_dim=conf.ggnn_rel_hidden_dim,
+        ggnn_rel_output_dim=None,
+        graph_path=ALL_EDGE,
+        emb_path=NODE_EMBEDDING,
+        rel_counts_path=REL_COUNTS,
+        use_knowledge=conf.use_knowledge,
+        use_embedding=conf.use_embedding,
+        refine_obj_cls=conf.refine_obj_cls,
+        class_volume=1.0,
+        with_clean_classifier=conf.use_bpl,
+        with_transfer=conf.use_sa,
+        sa=conf.use_sa,
+        config=conf,
+    )
+
+    # Freeze the detector 冻结 Faster-RCNN 参数
+    for n, param in model.detector.named_parameters():
+        param.requires_grad = False
+
+    # 加载模型并迁移至 GPU，这里最开始加载的其实是 GB-Net 的权重
+    ckpt = torch.load(conf.ckpt)
+    optimistic_restore(model, ckpt['state_dict'], skip_clean=False)
+    model = model.cuda()
+
+    return model

@@ -4,31 +4,80 @@ import sys
 import numpy as np
 import torch
 from apex import amp
+from tqdm import tqdm
 
 sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
 
-from lib.exp.conf_matrix_fn import train_evaluate
-from lib.exp.global_var import model, write, conf
+import config
+from lib.exp.provider import provide_model, provide_dataloader
 from lib.exp.exp_util import save_best_matrices
 from lib.exp.optim_fn import get_optim
 from lib.exp.train_fn import train_epoch
-from lib.exp.val_fn import val_epoch
+from lib.exp.val_fn import val_epoch, confusion_matrix_evaluate
 from lib.my_util import adj_normalize
-from config import CONF_MAT_UPDATED, data_path
+from config import data_path, CONF_MAT_UPDATED, CONF_MAT_FREQ_TRAIN, ModelConfig, ALPHA, print_globals
 
-alpha = 0.9
-start_epoch = 0
-end_epoch = 20 # 20
-optimizer = get_optim(conf.lr * conf.num_gpus * conf.batch_size)
-detector, optimizer = amp.initialize(model, optimizer, opt_level="O0")
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 选择显卡
+exp_name = 'hikersgg_predcls_train'  # 实验名
+write = tqdm.write  # 函数引用赋值，用来打印日志
 
+# 创建配置类，加载配置
+# vgrel-11 是 GB-Net 提供的预训练模型，HiKER-SGG 的模型结构和 GB-Net 非常接近
+conf = ModelConfig(f'''
+-m predcls
+-p 2500
+-clip 5
+-tb_log_dir summaries/kern_predcls/{exp_name}
+-save_dir checkpoints/kern_predcls/{exp_name}
+-ckpt checkpoints/vgdet/vgrel-11.tar
+-val_size 5000
+-b 8
+-nwork 24
+-ngpu 1
+-lr 1e-4
+-nepoch 20
+-pooling_dim 4096
+-ggnn_rel_time_step_num 3
+-ggnn_rel_hidden_dim 1024
+-adam
+-require_overlap_det
+-use_bpl
+-use_sa
+-use_knowledge
+-use_embedding
+-filter_duplicate_rels
+''')
+
+# 打印配置
+conf.print_self_config()
+print_globals(config)
+
+# Initialize the confusion matrix 初始化混淆矩阵
+initial_conf_matrix = np.load(CONF_MAT_FREQ_TRAIN)
+initial_conf_matrix[0, :] = 0.0
+initial_conf_matrix[:, 0] = 0.0
+initial_conf_matrix[0, 0] = 1.0
+initial_conf_matrix = initial_conf_matrix / (initial_conf_matrix.sum(-1)[:, None] + 1e-8)
+initial_conf_matrix = adj_normalize(initial_conf_matrix)
+np.save(CONF_MAT_UPDATED, initial_conf_matrix)  # 这个玩意是拿来算概率转移矩阵的
+
+# 各种变量的创建
+train_set, train_set_loader = provide_dataloader(conf, 'train')
+val_set, val_set_loader = provide_dataloader(conf, 'val')
+matrix_val_set, matrix_val_set_loader = provide_dataloader(conf, 'confusion_matrix_val')
+model = provide_model(conf, train_set.ind_to_classes, train_set.ind_to_predicates)
+optimizer = get_optim(model, conf)
+model, optimizer = amp.initialize(model, optimizer, opt_level="O0")
 conf_matrix_list = []
-matrices_list = []  # 收集每个 epoch mean Recall 数据
-nc_matrices_list = [] # 收集每个 epoch no constraint mean Recall 数据
-for epoch in range(start_epoch, end_epoch):
-    if (epoch + 1) % 3 == 0:    # 每三轮重新计算一次混淆矩阵，后面的数字为 2,5,8,11
+matrices_list = []  # mean recall of each epoch
+nc_matrices_list = []  # mean recall without constraint of each epoch
+
+# 正式开始
+for epoch in range(conf.num_epochs):
+    if (epoch + 1) % 3 == 0:  # 每三轮重新计算一次混淆矩阵，后面的数字为 2,5,8,11
         print('Evaluating new confusion matrix...')
-        conf_matrix = train_evaluate()  # 获取新的谓词混淆矩阵(见 3.7)，这个玩意应该是对 curEpoch - 1 轮最终结果的评估
+        # 获取新的谓词混淆矩阵(见 3.7)，这个玩意应该是对 curEpoch - 1 轮最终结果的评估
+        conf_matrix = confusion_matrix_evaluate(model, conf, matrix_val_set, matrix_val_set_loader)
         conf_matrix[0, :] = 0.0
         conf_matrix[:, 0] = 0.0
         conf_matrix[0, 0] = 1.0
@@ -37,7 +86,7 @@ for epoch in range(start_epoch, end_epoch):
         conf_matrix_list.append(conf_matrix)
 
         conf_matrix_old = np.load(CONF_MAT_UPDATED)  # 加载上轮 epoch 的转移概率矩阵
-        conf_matrix_new = conf_matrix_old * alpha + conf_matrix * (1 - alpha)  # 对应公式 (20)
+        conf_matrix_new = conf_matrix_old * ALPHA + conf_matrix * (1 - ALPHA)  # 对应公式 (20)
         np.save(CONF_MAT_UPDATED, conf_matrix_new)
         np.save(data_path(f'misc/conf/conf_mat_updated_{epoch}.npy'), conf_matrix_new)
 
@@ -47,7 +96,7 @@ for epoch in range(start_epoch, end_epoch):
         for param_group in optimizer.param_groups:
             param_group['lr'] /= 10
 
-    rez = train_epoch(epoch, optimizer)  # 开始训练
+    rez = train_epoch(model, conf, train_set, train_set_loader, epoch, optimizer)  # 开始训练
     losses_mean_epoch = rez.mean(axis=0)
     losses_mean_epoch_class = losses_mean_epoch['loss_class']
     losses_mean_epoch_rel = losses_mean_epoch['loss_rel']
@@ -58,13 +107,13 @@ for epoch in range(start_epoch, end_epoch):
         torch.save({
             'epoch': epoch,
             # {k:v for k,v in detector.state_dict().items() if not k.startswith('detector.')},
-            'state_dict': detector.state_dict(),
+            'state_dict': model.state_dict(),
             # 'optimizer': optimizer.state_dict(),
         }, os.path.join(conf.save_dir, '{}-{}.tar'.format('vgrel', epoch)))
         # noinspection PyPackageRequirements
         print(os.path.join(conf.save_dir, '{}-{}.tar'.format('vgrel', epoch)))
 
-    recall, recall_mp, mean_recall, mean_recall_mp = val_epoch()  # 开始评估
+    recall, recall_mp, mean_recall, mean_recall_mp = val_epoch(model, conf, val_set, val_set_loader)  # 开始评估
     matrices_list.append(mean_recall)
     nc_matrices_list.append(mean_recall_mp)
 

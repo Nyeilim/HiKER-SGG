@@ -34,7 +34,7 @@ class VG(Dataset):
     def __init__(self, mode, roidb_file=VG_SGG_FN, dict_file=VG_SGG_DICT_FN,
                  image_file=IM_DATA_FN, filter_empty_rels=True, num_im=-1, num_val_im=5000,
                  filter_duplicate_rels=True, filter_non_overlap=True,
-                 use_proposals=False, with_clean_classifier=None, get_state=None, caching=False, use_cache=False, test_n=False):
+                 use_proposals=False, with_clean_classifier=None, get_state=False, caching=False, use_cache=False, test_n=False):
         """
         Torch dataset for VisualGenome
         :param mode: Must be train, test, or val
@@ -642,6 +642,7 @@ class VGDataLoader(DataLoader):
             # 自定义的 batch 后处理函数，下面这个 lambda 表达式的入参 x 其实就是 batch
             collate_fn=lambda x: vg_collate(x, mode=mode, num_gpus=num_gpus, is_train=True),
             drop_last=True, # 是否丢弃最后一个不完整的批次。
+            pin_memory=True,
             **kwargs,
         )
         val_load = cls(
@@ -651,6 +652,7 @@ class VGDataLoader(DataLoader):
             num_workers=num_workers,
             collate_fn=lambda x: vg_collate(x, mode=mode, num_gpus=num_gpus, is_train=False),
             drop_last=True,
+            pin_memory=True,
             **kwargs,
         )
         return train_load, val_load
