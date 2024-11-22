@@ -8,18 +8,19 @@ from apex import amp
 sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
 
 from lib.exp.conf_matrix_fn import train_evaluate
-from lib.exp.global_var import detector, write, conf
+from lib.exp.global_var import model, write, conf
 from lib.exp.exp_util import save_best_matrices
 from lib.exp.optim_fn import get_optim
 from lib.exp.train_fn import train_epoch
 from lib.exp.val_fn import val_epoch
 from lib.my_util import adj_normalize
+from config import CONF_MAT_UPDATED, data_path
 
 alpha = 0.9
 start_epoch = 0
 end_epoch = 20 # 20
 optimizer = get_optim(conf.lr * conf.num_gpus * conf.batch_size)
-detector, optimizer = amp.initialize(detector, optimizer, opt_level="O0")
+detector, optimizer = amp.initialize(model, optimizer, opt_level="O0")
 
 conf_matrix_list = []
 matrices_list = []  # 收集每个 epoch mean Recall 数据
@@ -35,10 +36,10 @@ for epoch in range(start_epoch, end_epoch):
         conf_matrix = adj_normalize(conf_matrix)  # 行归一化，对应公式 (18)
         conf_matrix_list.append(conf_matrix)
 
-        conf_matrix_old = np.load('/output/data/misc/conf_mat_updated.npy')  # 加载上轮 epoch 的转移概率矩阵
+        conf_matrix_old = np.load(CONF_MAT_UPDATED)  # 加载上轮 epoch 的转移概率矩阵
         conf_matrix_new = conf_matrix_old * alpha + conf_matrix * (1 - alpha)  # 对应公式 (20)
-        np.save('/output/data/misc/conf_mat_updated.npy', conf_matrix_new)
-        np.save('/output/data/misc/conf/conf_mat_updated_{}.npy'.format(epoch), conf_matrix_new)
+        np.save(CONF_MAT_UPDATED, conf_matrix_new)
+        np.save(data_path(f'misc/conf/conf_mat_updated_{epoch}.npy'), conf_matrix_new)
 
     write(f'epoch = {epoch}')
     # 调整学习率

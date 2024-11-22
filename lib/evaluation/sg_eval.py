@@ -315,7 +315,7 @@ def _compute_pred_matches(gt_triplets, pred_triplets,
     return pred_to_gt
 
 
-def calculate_mR_from_evaluator_list(evaluator_list, mode, multiple_preds=False, save_file=None, return_per_class=False):
+def calculate_mr(evaluator_list, mode, multiple_preds=False, save_file=None, return_per_class=False):
     all_rel_results = {}
     for (pred_id, pred_name, evaluator_rel) in evaluator_list:
         #print('\n')

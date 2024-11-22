@@ -13,6 +13,7 @@ import torch.nn.functional as fn
 from lib.exp.hier import hierarchical_ent_reasoning, hierarchical_pred_reasoning
 from lib.lrga import LowRankAttention
 from lib.my_util import MLP, adj_normalize
+from config import CONF_MAT_FREQ_TRAIN, MODEL
 
 CUDA_DEVICE = torch.device(f'cuda:{current_device()}')
 
@@ -34,19 +35,19 @@ class GGNN(Module):
 
         self.with_clean_classifier = with_clean_classifier
         self.with_transfer = with_transfer
-        self.use_lrga = config.MODEL.LRGA.USE_LRGA
-        self.k = config.MODEL.LRGA.K
-        self.dropout = config.MODEL.LRGA.DROPOUT
+        self.use_lrga = MODEL.LRGA.USE_LRGA
+        self.k = MODEL.LRGA.K
+        self.dropout = MODEL.LRGA.DROPOUT
         self.in_channels = hidden_dim
         self.hidden_channels = hidden_dim
         self.out_channels = hidden_dim
 
         self.sa = sa
-        self.use_ontological_adjustment = config.MODEL.USE_ONTOLOGICAL_ADJUSTMENT
-        self.normalize_eoa = config.MODEL.NORMALIZE_EOA
-        self.shift_eoa = config.MODEL.SHIFT_EOA
-        self.fold_eoa = config.MODEL.FOLD_EOA
-        self.merge_eoa_sa = config.MODEL.MERGE_EOA_SA
+        self.use_ontological_adjustment = MODEL.USE_ONTOLOGICAL_ADJUSTMENT
+        self.normalize_eoa = MODEL.NORMALIZE_EOA
+        self.shift_eoa = MODEL.SHIFT_EOA
+        self.fold_eoa = MODEL.FOLD_EOA
+        self.merge_eoa_sa = MODEL.MERGE_EOA_SA
 
         self.normalize_classifier = False
 
@@ -190,7 +191,7 @@ class GGNN(Module):
             if self.with_transfer is True:
                 print("!!!!!!!!!With Confusion Matrix Channel!!!!!")
                 # 加载初始的谓词混淆矩阵
-                pred_adj_np = np.load(config.MODEL.CONF_MAT_FREQ_TRAIN)
+                pred_adj_np = np.load(CONF_MAT_FREQ_TRAIN)
                 # pred_adj_np = 1.0 - pred_adj_np
                 pred_adj_np[0, :] = 0.0
                 pred_adj_np[:, 0] = 0.0

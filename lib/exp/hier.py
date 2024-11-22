@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn.functional as fn
+from config import CONF_MAT_UPDATED
 
 CUDA_DEVICE = torch.device(f'cuda:{torch.cuda.current_device()}')
 
@@ -75,7 +76,7 @@ def hierarchical_pred_reasoning(pred_cls_logits, use_sa):
 
     # 这段代码就是概率转移 adaptive refinement，又称为 SA(Semantic Adjustment)，使用混淆矩阵来进行概率转移
     if use_sa:
-        pred_adj_np = np.load('/output/data/misc/conf_mat_updated.npy')  # 加载混淆矩阵，shape(51,51)，每行和为 1
+        pred_adj_np = np.load(CONF_MAT_UPDATED)  # 加载混淆矩阵，shape(51,51)，每行和为 1
         pred_adj_nor = torch.tensor(pred_adj_np, dtype=torch.float32, device=CUDA_DEVICE)
         pred_cls_logits = (pred_adj_nor @ pred_cls_logits.T).T  # 利用混淆矩阵实现概率转移，shape(img_all_rels, 51)
 

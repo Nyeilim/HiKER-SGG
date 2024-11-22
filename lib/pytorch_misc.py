@@ -16,7 +16,7 @@ from numpy.random import choice as np_random_choice
 from torch import tensor as torch_tensor, int64 as torch_int64, \
     FloatTensor as torch_FloatTensor, arange as torch_arange, \
     gather as torch_gather, from_numpy as torch_from_numpy, \
-    Tensor as torch_Tensor
+    Tensor as torch_Tensor, cat as torch_cat
 from torch.cuda import current_device
 from torch.nn import Module
 
@@ -106,14 +106,12 @@ class Flattener(Module):
 def to_variable(f):
     """
     Decorator that pushes all the outputs to a variable
-    :param f:
-    :return:
     """
     def variable_wrapper(*args, **kwargs):
         rez = f(*args, **kwargs)
         if isinstance(rez, tuple):
             return tuple([x if isinstance(x, torch_Tensor) else torch_tensor(x) for x in rez])
-        return rez if isinstance(x, torch_Tensor) else torch_tensor(rez)
+        return rez if isinstance(rez, torch_Tensor) else torch_tensor(rez)
     return variable_wrapper
 
 def arange(base_tensor, n=None):

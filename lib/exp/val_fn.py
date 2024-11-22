@@ -4,14 +4,16 @@ from torch.cuda.amp import autocast
 from tqdm import tqdm
 
 from config import BOX_SCALE, IM_SCALE
-from lib.evaluation.sg_eval import BasicSceneGraphEvaluator, calculate_mR_from_evaluator_list, eval_entry
-from lib.exp.global_var import conf, detector, ind_to_predicates, val_loader, val
+from lib.evaluation.sg_eval import BasicSceneGraphEvaluator, calculate_mr, eval_entry
+from lib.exp.global_var import conf, model, ind_to_predicates, val_loader, val
 
 
 def val_epoch(verbose=False):
-    detector.eval()
+    model.eval()
     evaluator_list = []  # for calculating recall of each relationship except no relationship
     evaluator_multiple_preds_list = []
+
+    # 为每个谓词创建两个评估器：单谓词评估器、多谓词评估器
     for index, name in enumerate(ind_to_predicates):
         if index == 0:
             continue
@@ -27,20 +29,20 @@ def val_epoch(verbose=False):
             val_batch(conf.num_gpus * val_b, batch, evaluator, evaluator_multiple_preds, evaluator_list,
                       evaluator_multiple_preds_list)
 
-    # mp 拿到的是无 constraint 的指标
+    # mp(multiple preds) == no constraint
     recall = evaluator[conf.mode].print_stats()
     recall_mp = evaluator_multiple_preds[conf.mode].print_stats()
 
-    mean_recall = calculate_mR_from_evaluator_list(evaluator_list, conf.mode)
-    mean_recall_mp = calculate_mR_from_evaluator_list(evaluator_multiple_preds_list, conf.mode, multiple_preds=True)
+    mean_recall = calculate_mr(evaluator_list, conf.mode)
+    mean_recall_mp = calculate_mr(evaluator_multiple_preds_list, conf.mode, multiple_preds=True)
 
-    detector.train()
+    model.train()
     return recall, recall_mp, mean_recall, mean_recall_mp
 
 
-def val_batch(batch_num, b, evaluator, evaluator_multiple_preds, evaluator_list, evaluator_multiple_preds_list):
+def val_batch(batch_num, batch, evaluator, evaluator_multiple_preds, evaluator_list, evaluator_multiple_preds_list):
     with autocast():
-        det_res = detector[b]
+        det_res = model[batch]
     if conf.num_gpus == 1:
         det_res = [det_res]
 

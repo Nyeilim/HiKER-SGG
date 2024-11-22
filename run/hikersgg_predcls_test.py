@@ -9,11 +9,11 @@ from tqdm import tqdm
 
 sys.path.append("/output/HiKER-SGG/")
 
-from config import ModelConfig, BOX_SCALE, IM_SCALE
+from config import ModelConfig, BOX_SCALE, IM_SCALE, CONF_MAT_UPDATED, CONF_MAT_FREQ_TRAIN, data_path
 from lib.exp.exp_util import load_best_matrices
 from lib.pytorch_misc import optimistic_restore
 # 如果把 sg_val 放在 my_model_24, visual_genome 后面就会导入报错，因为里面有个很重要的 setup 语句能导入 lib.fpn.box_intersections_cpu.bbox
-from lib.evaluation.sg_eval import BasicSceneGraphEvaluator, calculate_mR_from_evaluator_list, eval_entry
+from lib.evaluation.sg_eval import BasicSceneGraphEvaluator, calculate_mr, eval_entry
 from dataloaders.visual_genome import VGDataLoader, VG
 
 from lib.my_model_24 import KERN
@@ -43,17 +43,10 @@ conf = ModelConfig(f'''
 matrix_suffix = test_epoch - (test_epoch + 1) % 3   # 混淆矩阵会每三轮计算一次
 # 设置模型对应的混淆矩阵
 if matrix_suffix < 2:
-    conf_matrix =  np.load('/output/data/misc/conf_mat_freq_train.npy')
+    conf_matrix =  np.load(CONF_MAT_FREQ_TRAIN)
 else:
-    conf_matrix = np.load(f'/output/data/misc/conf/conf_mat_updated_{matrix_suffix}.npy')
-np.save('/output/data/misc/conf_mat_updated.npy', conf_matrix)
-conf.MODEL.CONF_MAT_FREQ_TRAIN = '/output/data/misc/conf_mat_freq_train.npy'
-conf.MODEL.LRGA.USE_LRGA = False
-conf.MODEL.USE_ONTOLOGICAL_ADJUSTMENT = False
-conf.MODEL.NORMALIZE_EOA = False
-# conf.MODEL.LRGA.K = 50
-# conf.MODEL.LRGA.DROPOUT = 0.5
-# conf.MODEL.GN.NUM_GROUPS = 1024//8
+    conf_matrix = np.load(data_path(f'misc/conf/conf_mat_updated_{matrix_suffix}.npy'))
+np.save(CONF_MAT_UPDATED, conf_matrix)
 
 # 数据集加载
 train, val, test = VG.splits(num_val_im=conf.val_size, filter_duplicate_rels=True,
@@ -131,8 +124,8 @@ def val_epoch():
     recall = evaluator[conf.mode].print_stats()
     recall_mp = evaluator_multiple_preds[conf.mode].print_stats()
 
-    mean_recall = calculate_mR_from_evaluator_list(evaluator_list, conf.mode)
-    mean_recall_mp = calculate_mR_from_evaluator_list(evaluator_multiple_preds_list, conf.mode, multiple_preds=True)
+    mean_recall = calculate_mr(evaluator_list, conf.mode)
+    mean_recall_mp = calculate_mr(evaluator_multiple_preds_list, conf.mode, multiple_preds=True)
 
     detector.train()
     return recall, recall_mp, mean_recall, mean_recall_mp

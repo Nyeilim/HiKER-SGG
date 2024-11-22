@@ -5,12 +5,12 @@ from apex import amp
 from torch.cuda.amp import autocast
 from tqdm import tqdm
 
-from lib.exp.global_var import conf, detector, train, train_loader, write
+from lib.exp.global_var import conf, model, train, train_loader, write
 from lib.pytorch_misc import clip_grad_norm
 
 
 def train_epoch(epoch_num, optimizer, verbose=False):
-    detector.train()
+    model.train()
     tr = []
     start = time_time()
     # disable = not verbose，关闭进度条，不然日志文件会很长
@@ -63,16 +63,16 @@ def train_batch(b, optimizer, verbose=False):
     """
     optimizer.zero_grad()
     with autocast():
-        result = detector[b]
-        loss_class = detector.obj_loss(result) # refine_obj_cls 为 False 情况下默认返回 0
-        loss_rel = detector.rel_loss(result)
-        loss_scpred = detector.scpred_loss(result)
+        result = model[b]
+        loss_class = model.obj_loss(result) # refine_obj_cls 为 False 情况下默认返回 0
+        loss_rel = model.rel_loss(result)
+        loss_scpred = model.scpred_loss(result)
 
         loss = loss_class + loss_rel + loss_scpred # 成本函数
     with amp.scale_loss(loss, optimizer) as scaled_loss: # 损失缩放，混合精度
         scaled_loss.backward() # 启用反向传播，计算出各个参数的梯度
-    clip_grad_norm([(n, p) for n, p in detector.named_parameters() if p.grad is not None], # 所有叶子节点，即 W、B
-                    max_norm=conf.clip, verbose=verbose, clip=True) # 梯度裁剪，所有参数梯度 L2 范数的和不能超过 conf.clip
+    clip_grad_norm([(n, p) for n, p in model.named_parameters() if p.grad is not None],  # 所有叶子节点，即 W、B
+                   max_norm=conf.clip, verbose=verbose, clip=True) # 梯度裁剪，所有参数梯度 L2 范数的和不能超过 conf.clip
     optimizer.step() # 梯度下降
     return result, {
         'loss_class': float(loss_class),

@@ -1,6 +1,7 @@
 import json
+from config import data_path
 
-best_matrices_file = '/output/data/best_matrices.json'
+best_matrices_file = data_path('best_matrices.json')
 
 # 这边 List 拿到的数据长这样：[{'R@100': 0.32365809238988463, 'R@20': 0.275271453097786, 'R@50': 0.3127690749291039}, {...}]
 def save_best_matrices(matrices_list, nc_matrices_list):
