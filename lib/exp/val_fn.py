@@ -52,8 +52,11 @@ def val_epoch(model, conf, val_set, val_set_loader):
 
     with torch_no_grad():
         for batch_idx, batch in prog_bar:
-            val_batch(conf.num_gpus * batch_idx, batch, evaluator, evaluator_multiple_preds, evaluator_list,
-                      evaluator_multiple_preds_list)
+            val_batch(
+                model, conf, val_set, conf.num_gpus * batch_idx, batch,
+                evaluator, evaluator_multiple_preds,
+                evaluator_list,evaluator_multiple_preds_list
+            )
 
     # mp(multiple preds) == no constraint
     recall = evaluator[conf.mode].print_stats()

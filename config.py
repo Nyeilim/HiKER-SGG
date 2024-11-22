@@ -284,6 +284,9 @@ class ModelConfig(object):
                 print_munch(y, x)
                 continue
             if not none_and_empty(y):  # 打印非 None 项
+                if ((self.test == True or self.test_n == True)
+                        and (x == 'val_size' or x == 'nepoch' or x == 'adam')): # Test 状态下不打印这几个值
+                    continue
                 print(f"{x}: {y}")
 
     # @formatter:off

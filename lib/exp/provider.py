@@ -18,7 +18,7 @@ def provide_dataloader(conf, dataloader_mode):
     )
 
     if dataloader_mode == 'test':
-        val = test
+        val = test # 复用 val_epoch 进行测试
     elif dataloader_mode == 'confusion_matrix_val':
         val = train
 
