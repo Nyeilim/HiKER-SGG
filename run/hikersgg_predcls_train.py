@@ -113,8 +113,8 @@ for epoch in range(conf.num_epochs):
         # noinspection PyPackageRequirements
         print(os.path.join(conf.save_dir, '{}-{}.tar'.format('vgrel', epoch)))
 
-    recall, recall_mp, mean_recall, mean_recall_mp = val_epoch(model, conf, val_set, val_set_loader)  # 开始评估
-    matrices_list.append(mean_recall)
-    nc_matrices_list.append(mean_recall_mp)
+    matrices = val_epoch(model, conf, val_set, val_set_loader)  # 开始评估
+    matrices_list.append(matrices[2]) # mean_recall
+    nc_matrices_list.append(matrices[3]) # mean_recall_mp
 
 save_best_matrices(matrices_list, nc_matrices_list)
