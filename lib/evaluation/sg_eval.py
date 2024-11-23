@@ -151,26 +151,39 @@ def evaluate_from_dict(gt_entry, pred_entry, mode, result_dict, multiple_preds=F
     return pred_to_gt, pred_5ples, rel_scores2
 
 def confusion_matrix(gt_rels, gt_boxes, gt_classes, pred_rel_inds, rel_scores, result_dict):
-    pred_pair_idx = pred_rel_inds[:, 0] * 1024 + pred_rel_inds[:, 1]
-    gt_pair_idx = gt_rels[:, 0] * 1024 + gt_rels[:, 1]
+    """
+    计算混淆矩阵，存储在 result_dict['predicate_confusion_matrix']
+    :param gt_rels: 存储着真实的 <s,o,p> 三元组
+    :param gt_boxes: 未使用
+    :param gt_classes: 未使用
+    :param pred_rel_inds: 存储着预测的 <s,o> 对
+    :param rel_scores: 存储着每个 <s,o> 对被预测为 51 个谓词的概率
+    :param result_dict: 混淆矩阵的存储结果在其中
+    """
+    pred_pair_idx = pred_rel_inds[:, 0] * 1024 + pred_rel_inds[:, 1] # 利用预测的 s,o 生成唯一标识符，长度记作 num_prediction
+    gt_pair_idx = gt_rels[:, 0] * 1024 + gt_rels[:, 1] # 利用真实的 s,o 生成唯一标识符，生成规则和上面相同，长度记作 num_gt_rel
+    # 生成形状 (num_prediction,num_gt_rel) 预测矩阵，其上的 True 表示预测的 <s,o> 同真实的 <s,o> 相匹配
+    # np_where 作用在上面，将会返回两个数组，分别代表 True 的地方的行索引和列索引，这个索引会和 pred_rels gt_rels 的索引匹配上
     pred_pair_in_gt = np_where(pred_pair_idx[:, None] == gt_pair_idx[None, :])
 
+    # 剔除空关系，找到最大的谓词概率作为预测谓词，然后形成 <s,o,p> 预测三元组
     pred_rels = np_column_stack((pred_rel_inds, 1 + rel_scores[:, 1:].argmax(1)))
     pred_scores = rel_scores[:, 1:].max(1)
-    pred_inds = pred_pair_in_gt[0]
-    gt_inds = pred_pair_in_gt[1]
+    pred_inds = pred_pair_in_gt[0] # 预测矩阵 True 项的行索引
+    gt_inds = pred_pair_in_gt[1] # 预测矩阵 True 项的列索引
     # match the subject and object
 
     # if self.mode == 'predcls':.
     for i in range(len(pred_inds)):
-        pred_ind = pred_inds[i]
-        gt_ind = gt_inds[i]
-        pred_pred_i = pred_rels[pred_ind][2]
-        gt_pred_i = gt_rels[gt_ind][2]
-        if pred_pred_i < result_dict['predicate_confusion_matrix'].shape[1] and \
-                gt_pred_i < result_dict['predicate_confusion_matrix'].shape[0]:
-            result_dict['predicate_confusion_matrix'][gt_pred_i][pred_pred_i] = \
-                result_dict['predicate_confusion_matrix'][gt_pred_i][pred_pred_i] + 1
+        pred_ind = pred_inds[i] # x
+        gt_ind = gt_inds[i] # y
+        pred_pred_i = pred_rels[pred_ind][2] # 预测谓词
+        gt_pred_i = gt_rels[gt_ind][2] # 实际谓词
+
+        # 索引越界检查，有必要吗？
+        if (pred_pred_i < result_dict['predicate_confusion_matrix'].shape[1]
+                and gt_pred_i < result_dict['predicate_confusion_matrix'].shape[0]):
+            result_dict['predicate_confusion_matrix'][gt_pred_i][pred_pred_i] += 1 # 混淆矩阵计数 +1
 
 def evaluate_recall(gt_rels, gt_boxes, gt_classes,
                     pred_rels, pred_boxes, pred_classes, rel_scores=None, cls_scores=None,
