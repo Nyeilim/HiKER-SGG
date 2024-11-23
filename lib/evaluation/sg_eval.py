@@ -27,7 +27,7 @@ class BasicSceneGraphEvaluator:
         self.result_dict = {}
         self.mode = mode
         self.result_dict[self.mode + '_recall'] = {20: [], 50: [], 100: []}
-        self.result_dict['predicate_confusion_matrix'] = np_zeros([51, 51], dtype='float32')
+        self.result_dict['predicate_confusion_matrix'] = np_zeros([51, 51], dtype='int')
         self.multiple_preds = multiple_preds
 
     @classmethod
