@@ -49,7 +49,9 @@ class GGNN(Module):
         self.fold_eoa = MODEL.FOLD_EOA
         self.merge_eoa_sa = MODEL.MERGE_EOA_SA
 
+        # 新增属性
         self.normalize_classifier = False
+        self.sg_edge_initial = False
 
         if self.use_lrga is True:
             self.attention = ModuleList()

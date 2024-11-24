@@ -81,7 +81,7 @@ def _val_epoch(model, conf, dataset, dataloader, matrix_eval):
         print('~~~~~~~~ Confusion Matrix in Val Epoch ~~~~~~~~')
         print(confusion_matrix)
         dump_file = data_path('confusion_matrix.npy')
-        np.save(confusion_matrix, dump_file)
+        np.save(dump_file, confusion_matrix)
 
     # matrices; mp(multiple preds) equals `without constraint`
     recall = evaluator[conf.mode].print_stats()

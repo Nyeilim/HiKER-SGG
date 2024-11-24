@@ -319,17 +319,14 @@ class KERN(Module):
         if self.training:
             rel_inds = rel_labels[:, :3].data.clone()
         else:
-            rel_cands = im_inds.data[:, None] == im_inds.data[None]
-            rel_cands.view(-1)[diagonal_inds(rel_cands)] = 0
+            rel_cands = im_inds.data[:, None] == im_inds.data[None, :]
+            rel_cands.view(-1)[diagonal_inds(rel_cands)] = 0 # 去除对角线自关系
             if self.require_overlap:
-                rel_cands = rel_cands & (bbox_overlaps(box_priors.data,
-                                                       box_priors.data) > 0)
-
-                # if there are fewer then 100 things then we might as well add some?
+                rel_cands = rel_cands & (bbox_overlaps(box_priors.data, box_priors.data) > 0) # 去除不重叠的对象对
+                # if there are fewer than 100 things then we might as well add some?
                 amt_to_add = 100 - rel_cands.long().sum()
 
-            rel_cands = rel_cands.nonzero()
-
+            rel_cands = rel_cands.nonzero() # 矩阵转换为行索引，列索引两个数组
             if rel_cands.dim() == 0:
                 rel_cands = im_inds.data.new(1, 2).fill_(0)
 

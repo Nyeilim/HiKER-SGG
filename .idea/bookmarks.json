@@ -1,6 +1,24 @@
 {
   "HiKER-SGG": [
     {
+      "fileDescriptor": "$/lib/my_model_24.py",
+      "linenumber": 353,
+      "name": "分发样本",
+      "bookmarkType": "LETTER_F"
+    },
+    {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 260,
+      "name": "BPL\u0026SA: 成员变量赋值给局部变量",
+      "bookmarkType": "LETTER_B"
+    },
+    {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 184,
+      "name": "BPL: Init 阶段创建独属于 BPL 方法的 MLP 层以及加载混淆矩阵",
+      "bookmarkType": "LETTER_C"
+    },
+    {
       "fileDescriptor": "$/lib/exp/train_fn.py",
       "linenumber": 47,
       "name": "训练时前向传播的入口",
@@ -11,18 +29,6 @@
       "linenumber": 16,
       "name": "打印进度条",
       "bookmarkType": "LETTER_Z"
-    },
-    {
-      "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 258,
-      "name": "BPL\u0026SA: 成员变量赋值给局部变量",
-      "bookmarkType": "LETTER_B"
-    },
-    {
-      "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 182,
-      "name": "BPL: Init 阶段创建独属于 BPL 方法的 MLP 层以及加载混淆矩阵",
-      "bookmarkType": "LETTER_C"
     },
     {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
@@ -59,12 +65,6 @@
       "linenumber": 17,
       "name": "导入 Cython 相关库",
       "bookmarkType": "DIGIT_3"
-    },
-    {
-      "fileDescriptor": "$/lib/my_model_24.py",
-      "linenumber": 356,
-      "name": "分发样本",
-      "bookmarkType": "LETTER_F"
     },
     {
       "fileDescriptor": "$/lib/my_model_24.py",
