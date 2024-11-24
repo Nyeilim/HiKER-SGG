@@ -326,11 +326,11 @@ class KERN(Module):
                 # if there are fewer than 100 things then we might as well add some?
                 amt_to_add = 100 - rel_cands.long().sum()
 
-            rel_cands = rel_cands.nonzero() # 矩阵转换为行索引，列索引两个数组
+            rel_cands = rel_cands.nonzero() # 矩阵中 True 的位置转换多个 (x,y)
             if rel_cands.dim() == 0:
                 rel_cands = im_inds.data.new(1, 2).fill_(0)
 
-            rel_inds = torch_cat((im_inds.data[rel_cands[:, 0]][:, None], rel_cands), 1)
+            rel_inds = torch_cat((im_inds.data[rel_cands[:, 0]][:, None], rel_cands), 1) # 拼接后的结果为 [im_ind, subject, object]
 
         return rel_inds
 

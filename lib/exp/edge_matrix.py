@@ -13,7 +13,7 @@ from lib.exp.provider import provide_dataloader
 edge_matrix = np.zeros((151,151,51), dtype=int)
 file = data_path('edge_matrix.npy')
 non_rel_count, bg_count = 0, 0
-verbose = True
+verbose = False
 conf = ModelConfig(f'''
 -val_size 5000
 -filter_duplicate_rels
