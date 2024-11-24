@@ -12,6 +12,8 @@ from lib.exp.provider import provide_dataloader
 # 构建个 151x151x51 的数组，对应 151 个实体间的 51 种关系
 edge_matrix = np.zeros((151,151,51))
 file = data_path('edge_matrix.npy')
+non_rel_count, bg_count = 0, 0
+verbose = True
 conf = ModelConfig(f'''
 -val_size 5000
 -filter_duplicate_rels
@@ -22,6 +24,8 @@ conf = ModelConfig(f'''
 ''')
 
 train_full, train_full_loader = provide_dataloader(conf, 'train')
+ind_to_classes, ind_to_predicates = train_full.ind_to_classes, train_full.ind_to_predicates
+
 for entry in train_full:
     gt_rels = entry['gt_relations']
     gt_classes = entry['gt_classes']
@@ -32,4 +36,12 @@ for entry in train_full:
         p = rel[2]
         edge_matrix[s][o][p] += 1
 
+        if verbose:
+            print('<{},{},{}>'.format(ind_to_classes[s], ind_to_predicates[p], ind_to_classes[o]))
+        if 0 == p:
+            non_rel_count += 1
+        if 0 == s or 0 == o:
+            bg_count += 1
+
+print('non_rel_count:{}, bg_count:{}'.format(non_rel_count, bg_count))
 np.save(file, edge_matrix)
