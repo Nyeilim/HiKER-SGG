@@ -3,7 +3,7 @@ from torch import no_grad as torch_no_grad
 from torch.cuda.amp import autocast
 from tqdm import tqdm
 
-from config import BOX_SCALE, IM_SCALE, DIS_PROGRESS_BAR
+from config import BOX_SCALE, IM_SCALE, DIS_PROGRESS_BAR, data_path
 from lib.evaluation.sg_eval import BasicSceneGraphEvaluator, calculate_mr, eval_entry
 
 
@@ -80,6 +80,8 @@ def _val_epoch(model, conf, dataset, dataloader, matrix_eval):
     if not matrix_eval:
         print('~~~~~~~~ Confusion Matrix in Val Epoch ~~~~~~~~')
         print(confusion_matrix)
+        dump_file = data_path('confusion_matrix.npy')
+        np.save(confusion_matrix, dump_file)
 
     # matrices; mp(multiple preds) equals `without constraint`
     recall = evaluator[conf.mode].print_stats()

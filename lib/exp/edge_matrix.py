@@ -43,5 +43,5 @@ for entry in train_full:
         if 0 == s or 0 == o:
             bg_count += 1
 
-print('non_rel_count:{}, bg_count:{}'.format(non_rel_count, bg_count))
+print('non_rel_count:{}, bg_count:{}'.format(non_rel_count, bg_count)) # result: 0,0
 np.save(file, edge_matrix)

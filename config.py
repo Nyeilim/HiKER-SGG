@@ -30,7 +30,7 @@ def metadata_path(fn):
 
 
 def data_path(fn):
-    return os.path.join(DATA_PATH, fn)  # 斯坦福标注数据目录
+    return os.path.join(DATA_PATH, fn)  # 数据目录，杂七杂八的全放这
 
 
 def create_data_subdir(path):
