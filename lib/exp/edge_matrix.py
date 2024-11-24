@@ -9,8 +9,8 @@ from config import data_path, ModelConfig
 from lib.exp.provider import provide_dataloader
 
 # 获取训练集中初始边信息，这是个可以单独运行的程序
-# 构建个 51x51x151 的数组，对应 51 个实体间的 151 种关系
-edge_matrix = np.zeros((51,51,151))
+# 构建个 151x151x51 的数组，对应 151 个实体间的 51 种关系
+edge_matrix = np.zeros((151,151,51))
 file = data_path('edge_matrix.npy')
 conf = ModelConfig(f'''
 -val_size 5000
@@ -24,11 +24,12 @@ conf = ModelConfig(f'''
 train_full, train_full_loader = provide_dataloader(conf, 'train')
 for entry in train_full:
     gt_rels = entry['gt_relations']
-    gt_boxes = entry['gt_boxes']
     gt_classes = entry['gt_classes']
 
-    # 翻译后的，每行的 <s,o,p> 分别对应着 entity.index, predicate.index
-    gt_rels_trans = [[gt_classes[item[0], gt_classes[item[1], item[2]]]] for item in gt_rels]
-    edge_matrix[gt_rels_trans[0]][gt_rels_trans[1]][gt_rels_trans[2]] += 1
+    for rel in gt_rels:
+        s = gt_classes[rel[0]]
+        o = gt_classes[rel[1]]
+        p = rel[2]
+        edge_matrix[s][o][p] += 1
 
 np.save(file, edge_matrix)
