@@ -10,7 +10,7 @@ from lib.exp.provider import provide_dataloader
 
 # 获取训练集中初始边信息，这是个可以单独运行的程序
 # 构建个 151x151x51 的数组，对应 151 个实体间的 51 种关系
-edge_matrix = np.zeros((151,151,51))
+edge_matrix = np.zeros((151,151,51), dtype=int)
 file = data_path('edge_matrix.npy')
 non_rel_count, bg_count = 0, 0
 verbose = True
