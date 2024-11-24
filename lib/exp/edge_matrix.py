@@ -1,5 +1,10 @@
 import numpy as np
+import pyximport
+import sys
 
+sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
+# 这行语句会自动编译项目里 .pyx 文件，这里会导致两次编译，分别是 box_intersections_cpu 和 draw_rectangles
+pyximport.install(setup_args={"include_dirs":np.get_include()}, reload_support=True)
 from config import data_path, ModelConfig
 from lib.exp.provider import provide_dataloader
 
