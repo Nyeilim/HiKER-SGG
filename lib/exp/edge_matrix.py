@@ -26,3 +26,9 @@ for entry in train_full:
     gt_rels = entry['gt_relations']
     gt_boxes = entry['gt_boxes']
     gt_classes = entry['gt_classes']
+
+    # 翻译后的，每行的 <s,o,p> 分别对应着 entity.index, predicate.index
+    gt_rels_trans = [[gt_classes[item[0], gt_classes[item[1], item[2]]]] for item in gt_rels]
+    edge_matrix[gt_rels_trans[0]][gt_rels_trans[1]][gt_rels_trans[2]] += 1
+
+np.save(file, edge_matrix)
