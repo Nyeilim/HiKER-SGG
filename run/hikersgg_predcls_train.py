@@ -77,7 +77,7 @@ for epoch in range(conf.num_epochs):
     if (epoch + 1) % 3 == 0:  # 每三轮重新计算一次混淆矩阵，后面的数字为 2,5,8,11
         print('Evaluating new confusion matrix...')
         # 获取新的谓词混淆矩阵(见 3.7)，使用当前模型过一遍完整训练集 train_full
-        conf_matrix = confusion_matrix_evaluate(model, conf, matrix_val_set, matrix_val_set_loader).astype(float)
+        conf_matrix = confusion_matrix_evaluate(model, conf, matrix_val_set, matrix_val_set_loader)
         conf_matrix[0, :] = 0.0
         conf_matrix[:, 0] = 0.0
         conf_matrix[0, 0] = 1.0

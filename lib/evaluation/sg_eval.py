@@ -27,7 +27,8 @@ class BasicSceneGraphEvaluator:
         self.result_dict = {}
         self.mode = mode
         self.result_dict[self.mode + '_recall'] = {20: [], 50: [], 100: []}
-        self.result_dict['predicate_confusion_matrix'] = np_zeros([51, 51], dtype='int')
+        self.result_dict['predicate_confusion_matrix'] = np_zeros([51, 51], dtype='float')
+        self.result_dict['predicate_confusion_matrix_int'] = np_zeros([51, 51], dtype='int')
         self.multiple_preds = multiple_preds
 
     @classmethod
@@ -184,6 +185,7 @@ def confusion_matrix(gt_rels, gt_boxes, gt_classes, pred_rel_inds, rel_scores, r
         if (pred_pred_i < result_dict['predicate_confusion_matrix'].shape[1]
                 and gt_pred_i < result_dict['predicate_confusion_matrix'].shape[0]):
             result_dict['predicate_confusion_matrix'][gt_pred_i][pred_pred_i] += 1 # 混淆矩阵计数 +1
+            result_dict['predicate_confusion_matrix_int'][gt_pred_i][pred_pred_i] += 1
 
 def evaluate_recall(gt_rels, gt_boxes, gt_classes,
                     pred_rels, pred_boxes, pred_classes, rel_scores=None, cls_scores=None,
