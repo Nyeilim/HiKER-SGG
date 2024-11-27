@@ -254,7 +254,7 @@ class GGNN(Module):
         ## SP/CP 之间的桥边，SP/CP 的邻接矩阵未进行初始化；使用该矩阵，对于某个特定的 SP 节点，我们可以找到其 CP 节点
         edges_img2ont_pred = torch.zeros((num_img_pred, self.num_ont_pred), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
         if self.pred_bridge_edge_initial:
-            # 推理模式下开启边初始化，需要根据边矩阵将 SP 按概率连接到 CP 节点
+            # 开启边初始化，需要根据边矩阵将 SP 按概率连接到 CP 节点
             edge_matrix = np.load(EDGE_MATRIX)
             all_rel_count = edge_matrix.sum(2) + 1e-8
             edge_prob_matrix = edge_matrix.astype(float) / all_rel_count[:, :, None]
@@ -262,7 +262,7 @@ class GGNN(Module):
             # 对于第 i 个 SP
             for i in range(num_img_pred):
                 s,o = rel_inds[i][0], rel_inds[i][1]
-                edges_img2ont_pred[i, :51] = edge_prob_matrix[s][o]
+                edges_img2ont_pred[i, :51] = torch.from_numpy(edge_prob_matrix[s][o]).cuda()
         edges_ont2img_pred = edges_img2ont_pred.t()
 
         # KG 图上的边，信息来自 all_edges_with_sccluster2_pred_ent.pkl；第一维代表着边类型 type，猜测和超类节点有关？
