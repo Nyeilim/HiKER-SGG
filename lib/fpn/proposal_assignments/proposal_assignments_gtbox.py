@@ -6,7 +6,7 @@ from config import RELS_PER_IMG, REL_FG_FRACTION
 
 
 @to_variable
-def proposal_assignments_gtbox(rois, gt_boxes, gt_classes, gt_rels, image_offset, fg_thresh=0.5):
+def proposal_assignments_gtbox(rois, gt_boxes, gt_classes, gt_rels, image_offset, add_bg_rels):
     """
     Assign object detection proposals to ground-truth targets. Produces proposal
     classification labels and bounding-box regression targets. 这个方法会添加大量的背景关系
@@ -25,11 +25,11 @@ def proposal_assignments_gtbox(rois, gt_boxes, gt_classes, gt_rels, image_offset
     """
     im_inds = rois[:,0].long()
     labels = gt_classes[:,1].contiguous()
-    rel_labels = add_potential_bg_rels(im_inds, gt_boxes, gt_rels, image_offset)
+    rel_labels = postprocess_rels(im_inds, gt_boxes, gt_rels, image_offset, add_bg_rels)
 
     return rois, labels, rel_labels
 
-def add_potential_bg_rels(im_inds, gt_boxes, gt_rels, image_offset):
+def postprocess_rels(im_inds, gt_boxes, gt_rels, image_offset, add_bg_rels):
     num_im = im_inds[-1] + 1
 
     # Offset the image indices in fg_rels to refer to absolute indices (not just within img i)
@@ -55,15 +55,19 @@ def add_potential_bg_rels(im_inds, gt_boxes, gt_rels, image_offset):
     # Add in some BG labels
     is_cand.view(-1)[fg_rels[:,1]*im_inds.size(0) + fg_rels[:,2]] = 0 # 排除已存在的前景关系 fg_rels
     is_bgcand = is_cand.nonzero() # 把最后的非 0 项拿到，就是 roi 之间可能存在的背景关系
-    # TODO: make this sample on a per image case
-    # If too many then sample
-    num_fg = min(fg_rels.size(0), int(RELS_PER_IMG * REL_FG_FRACTION * num_im))
+
+    fg_rels = fg_rels[fg_rels[:, 3] != -1]  # 使用布尔索引，移除前景关系中谓词为 -1:redundant_pred 的关系
+    num_fg = min(fg_rels.size(0), int(RELS_PER_IMG * REL_FG_FRACTION * num_im)) # If too many then sample
     if num_fg < fg_rels.size(0):
         fg_rels = random_choose(fg_rels, num_fg)
 
     # If too many then sample，背景关系太多会进行随机采样，得到最后 bg_rels
     num_bg = min(is_bgcand.size(0) if is_bgcand.dim() > 0 else 0,
                  int(RELS_PER_IMG * num_im) - num_fg)
+
+    if not add_bg_rels:
+        num_bg = 0
+
     if num_bg > 0:
         bg_rels = torch.cat((
             im_inds[is_bgcand[:, 0]][:, None],
@@ -74,7 +78,6 @@ def add_potential_bg_rels(im_inds, gt_boxes, gt_rels, image_offset):
         if num_bg < is_bgcand.size(0):
             bg_rels = random_choose(bg_rels, num_bg)
 
-        fg_rels = fg_rels[fg_rels[:, 3] != -1] # 使用布尔索引，移除前景关系中谓词为 -1:redundant_pred 的关系
         rel_labels = torch.cat((fg_rels, bg_rels), 0) # 合并前景关系与背景关系，作为最后的返回值
     else:
         rel_labels = fg_rels

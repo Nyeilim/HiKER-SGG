@@ -64,6 +64,8 @@ class VG(Dataset):
         self.filter_non_overlap = filter_non_overlap
         self.filter_duplicate_rels = filter_duplicate_rels and self.mode == 'train'
 
+        self.non_rel_revise = False # 空关系修正
+
         # 这个 dict_file 就是 VG-SGG-dicts.json
         self.ind_to_classes, self.ind_to_predicates = load_info(dict_file)  # contiguous 151, 51 containing __background__
         self.split_mask, self.gt_boxes, self.gt_classes, self.relationships = load_graphs(
@@ -72,7 +74,7 @@ class VG(Dataset):
             filter_non_overlap=self.filter_non_overlap and self.is_train,
             dict_file=dict_file,
             with_clean_classifier=with_clean_classifier,
-            get_state=get_state,
+            non_rel_revise=self.non_rel_revise,
             ind_to_predicates=self.ind_to_predicates,
         )
 
@@ -383,7 +385,7 @@ def load_image_filenames(image_file, image_dir=VG_IMAGES):
 
 
 def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty_rels=True,
-                filter_non_overlap=False, dict_file=None, with_clean_classifier=None, ind_to_predicates=None, get_state=None):
+                filter_non_overlap=False, dict_file=None, with_clean_classifier=None, ind_to_predicates=None, non_rel_revise = False):
     """
     Load the file containing the GT boxes and relations, as well as the dataset split
     :param graphs_file: HDF5
@@ -489,9 +491,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
     else:
         print('Dataloader NOT using BPL')
         root_classes = None
-    # 所以这个 get_state 是用来干嘛的？重置位？
-    if get_state:
-        root_classes = None
+
     root_classes_count = {}
     leaf_classes_count = {}
     all_classes_count = {}
@@ -569,16 +569,22 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
                     if root_classes_count[rel_i_pred] < BPL_LIMIT: # Adjust the intensity of BPL here
                         rel_temp.append(rel_i_root)
                         root_classes_count[rel_i_pred] = root_classes_count[rel_i_pred] + 1
-                    else:
+                    elif non_rel_revise:
                         # 多余的头部谓词将其标记为 -1 redundant_pred，意为冗余谓词
                         rel_i_root[2] = -1
                         rel_temp.append(rel_i_root)
 
-            # 去除仅包含多余头部谓词的图片样本，实际上并不能完全去除，需要在 Blob.append 处也添加断言；
-            # 因为某些尾部谓词可能在后续的过滤中被去掉，导致该图片仍只留下多余头部谓词
-            # 可断点观察 image_index[i] == 35124 的样本，它在 Blob.append() 的信息为 'index': 9016, 'fn': '/root/VG_100K/2386175.jpg'
-            if all(rel[2] == -1 for rel in rel_temp):
-                split_mask[image_index[i]] = 0  # 训练集中大量仅包含头部谓词的样本会在执行 BPL 方法后于这行被剔除
+            only_root_pred = False
+            if non_rel_revise and all(rel[2] == -1 for rel in rel_temp):
+                only_root_pred = True
+            elif not non_rel_revise and len(rel_temp) == 0:
+                only_root_pred = True
+
+            # 过滤仅包含多余头部谓词的图片样本
+            if only_root_pred:
+                # 空关系修正的情况，实际上并不能完全过滤，需要在 vg_collate 处添加二次过滤，因为某些尾部谓词可能在后续的处理中被去掉，导致该图片仍只留下多余头部谓词
+                # 可断点观察 image_index[i] == 35124 的样本，它在 Blob.append() 的信息为 'index': 9016, 'fn': '/root/VG_100K/2386175.jpg'
+                split_mask[image_index[i]] = 0
                 continue
             else:
                 assert not all(rel[2] == -1 for rel in rel_temp)

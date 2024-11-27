@@ -78,6 +78,8 @@ class ObjectDetector(nn.Module):
         self.use_resnet = use_resnet
         self.thresh = thresh
 
+        self.add_bg_rels = False # 是否添加背景关系
+
         if not self.use_resnet:
             vgg_model = load_vgg() # 使用 Pytorch VGG16 作为骨干网络，classifier 去掉最后的分类头
             self.features = vgg_model.features
@@ -223,7 +225,7 @@ class ObjectDetector(nn.Module):
         if gt_rels is not None and self.training:
             # 以 gt_box 设置 rois 的回归目标和标签，扩充背景关系
             rois, labels, rel_labels = proposal_assignments_gtbox(
-                rois.data, gt_boxes.data, gt_classes.data, gt_rels.data, image_offset, fg_thresh=0.5
+                rois.data, gt_boxes.data, gt_classes.data, gt_rels.data, image_offset, self.add_bg_rels
             )
         else:
             labels = gt_classes[:, 1]
