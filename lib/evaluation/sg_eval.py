@@ -357,7 +357,6 @@ def calculate_mr(evaluator_list, mode, multiple_preds=False, save_file=None, ret
 
     recall_mode = 'mean recall without constraint' if multiple_preds else 'mean recall with constraint'
 
-    print('\n', flush=True)
     print(f'======================{mode}  {recall_mode}============================', flush=True)
     print('mR@20: ', mR20, flush=True)
     print('mR@50: ', mR50, flush=True)

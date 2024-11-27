@@ -78,18 +78,19 @@ def _val_epoch(model, conf, dataset, dataloader, matrix_eval):
     # confusion matrix
     confusion_matrix = evaluator[conf.mode].result_dict['predicate_confusion_matrix']
     confusion_matrix_int = evaluator[conf.mode].result_dict['predicate_confusion_matrix_int']
+    matrices = None
     if not matrix_eval:
+        # matrices; mp(multiple preds) equals `without constraint`
+        recall = evaluator[conf.mode].print_stats()
+        recall_mp = evaluator_multiple_preds[conf.mode].print_stats()
+        mean_recall = calculate_mr(evaluator_list, conf.mode)
+        mean_recall_mp = calculate_mr(evaluator_multiple_preds_list, conf.mode, multiple_preds=True)
+        matrices = (recall, recall_mp, mean_recall, mean_recall_mp)
+
         print('~~~~~~~~ Confusion Matrix in Val Epoch ~~~~~~~~')
         print(confusion_matrix_int)
         dump_file = data_path('confusion_matrix.npy')
         np.save(dump_file, confusion_matrix_int)
-
-    # matrices; mp(multiple preds) equals `without constraint`
-    recall = evaluator[conf.mode].print_stats()
-    recall_mp = evaluator_multiple_preds[conf.mode].print_stats()
-    mean_recall = calculate_mr(evaluator_list, conf.mode)
-    mean_recall_mp = calculate_mr(evaluator_multiple_preds_list, conf.mode, multiple_preds=True)
-    matrices = (recall, recall_mp, mean_recall, mean_recall_mp)
 
     model.train()
     return matrices, confusion_matrix
