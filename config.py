@@ -82,6 +82,7 @@ REL_COUNTS = root_path('graphs/001/pred_counts.pkl')  # 训练集中每个谓词
 ## 中间数据文件
 CONF_MAT_FREQ_TRAIN = data_path('misc/conf_mat_freq_train.npy')  # 初始的谓词混淆矩阵，来自 SGG-G2S 的工作，由 MotifNet 生成
 CONF_MAT_UPDATED = data_path('misc/conf_mat_updated.npy')  # 途中由混淆矩阵计算出的谓词转移矩阵，用于 SA
+EDGE_MATRIX = data_path('edge_matrix.npy')
 # =============================================================================
 # 全局变量
 BPL_LIMIT = 1000 # BPL 单个谓词上限

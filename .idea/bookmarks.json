@@ -1,16 +1,22 @@
 {
   "HiKER-SGG": [
     {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 278,
+      "name": "BPL\u0026SA: 成员变量赋值给局部变量",
+      "bookmarkType": "LETTER_B"
+    },
+    {
       "fileDescriptor": "$/lib/my_model_24.py",
-      "linenumber": 353,
+      "linenumber": 351,
       "name": "分发样本",
       "bookmarkType": "LETTER_F"
     },
     {
-      "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 260,
-      "name": "BPL\u0026SA: 成员变量赋值给局部变量",
-      "bookmarkType": "LETTER_B"
+      "fileDescriptor": "$/lib/my_model_24.py",
+      "linenumber": 264,
+      "name": "调用 GGNNRelReason",
+      "bookmarkType": "LETTER_J"
     },
     {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
@@ -65,12 +71,6 @@
       "linenumber": 17,
       "name": "导入 Cython 相关库",
       "bookmarkType": "DIGIT_3"
-    },
-    {
-      "fileDescriptor": "$/lib/my_model_24.py",
-      "linenumber": 266,
-      "name": "调用 GGNNRelReason",
-      "bookmarkType": "LETTER_J"
     },
     {
       "fileDescriptor": "$/lib/my_model_24.py",

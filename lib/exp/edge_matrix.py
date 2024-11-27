@@ -5,13 +5,13 @@ import sys
 sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
 # 这行语句会自动编译项目里 .pyx 文件，这里会导致两次编译，分别是 box_intersections_cpu 和 draw_rectangles
 pyximport.install(setup_args={"include_dirs":np.get_include()}, reload_support=True)
-from config import data_path, ModelConfig
+from config import ModelConfig, EDGE_MATRIX
 from lib.exp.provider import provide_dataloader
 
 # 获取训练集中初始边信息，这是个可以单独运行的程序
 # 构建个 151x151x51 的数组，对应 151 个实体间的 51 种关系
 edge_matrix = np.zeros((151,151,51), dtype=int)
-file = data_path('edge_matrix.npy')
+file = EDGE_MATRIX
 non_rel_count, bg_count = 0, 0
 verbose = False
 conf = ModelConfig(f'''

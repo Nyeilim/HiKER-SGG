@@ -13,7 +13,7 @@ import torch.nn.functional as fn
 from lib.exp.hier import hierarchical_ent_reasoning, hierarchical_pred_reasoning
 from lib.lrga import LowRankAttention
 from lib.my_util import MLP, adj_normalize
-from config import CONF_MAT_FREQ_TRAIN, MODEL
+from config import CONF_MAT_FREQ_TRAIN, MODEL, EDGE_MATRIX
 
 CUDA_DEVICE = torch.device(f'cuda:{current_device()}')
 
@@ -51,7 +51,7 @@ class GGNN(Module):
 
         # 新增属性
         self.normalize_classifier = False
-        self.sg_edge_initial = False
+        self.pred_bridge_edge_initial = True
 
         if self.use_lrga is True:
             self.attention = ModuleList()
@@ -209,6 +209,14 @@ class GGNN(Module):
 
 
     def forward(self, rel_inds, obj_probs, obj_fmaps, vr):
+        """
+        GGNN Rules 内核
+        :param rel_inds: shape(img_all_rels,2) <s,o> 二元组
+        :param obj_probs: shape(img_gt_boxes,151)
+        :param obj_fmaps: gt_boxes 所在区域的特征图 shape(img_gt_boxes,1024)
+        :param vr: rel 的视觉特征 shape(img_all_rels,1024)
+        :return: 谓词的预测概率 pred_cls_score 超类谓词的预测概率 scpred_cls_score
+        """
         # This is a per_image representation, not an embedding.
         num_img_ent = obj_probs.size(0) # img_gt_boxes
         num_img_pred = rel_inds.size(0) # img_all_rels = img_gt_boxes * (img_gt_boxes - 1); -1 是去除实体的自关系
@@ -232,8 +240,8 @@ class GGNN(Module):
         assert torch.all((0 <= rel_inds[:, 0]) & (rel_inds[:, 0] < num_img_ent))
         assert torch.all((0 <= rel_inds[:, 1]) & (rel_inds[:, 1] < num_img_ent))
         edges_img_pred2subj = torch.zeros((num_img_pred, num_img_ent), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
-        edges_img_pred2subj[arange(num_img_pred), rel_inds[:, 0]] = 1 # 使用这个矩阵，对于某个特定的 SP 节点【行】，我们可以找到其 CE Subject【列】
         edges_img_pred2obj = torch.zeros((num_img_pred, num_img_ent), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
+        edges_img_pred2subj[arange(num_img_pred), rel_inds[:, 0]] = 1 # 使用这个矩阵，对于某个特定的 SP 节点【行】，我们可以找到其 CE Subject【列】
         edges_img_pred2obj[arange(num_img_pred), rel_inds[:, 1]] = 1 # 使用这个矩阵，对于某个特定的 SP 节点【行】，我们可以找到其 CE Object【列】
         edges_img_subj2pred = edges_img_pred2subj.t()
         edges_img_obj2pred = edges_img_pred2obj.t()
@@ -245,6 +253,16 @@ class GGNN(Module):
         edges_ont2img_ent = edges_img2ont_ent.t()
         ## SP/CP 之间的桥边，SP/CP 的邻接矩阵未进行初始化；使用该矩阵，对于某个特定的 SP 节点，我们可以找到其 CP 节点
         edges_img2ont_pred = torch.zeros((num_img_pred, self.num_ont_pred), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
+        if self.pred_bridge_edge_initial:
+            # 推理模式下开启边初始化，需要根据边矩阵将 SP 按概率连接到 CP 节点
+            edge_matrix = np.load(EDGE_MATRIX)
+            all_rel_count = edge_matrix.sum(2) + 1e-8
+            edge_prob_matrix = edge_matrix.astype(float) / all_rel_count[:, :, None]
+
+            # 对于第 i 个 SP
+            for i in range(num_img_pred):
+                s,o = rel_inds[i][0], rel_inds[i][1]
+                edges_img2ont_pred[i, :51] = edge_prob_matrix[s][o]
         edges_ont2img_pred = edges_img2ont_pred.t()
 
         # KG 图上的边，信息来自 all_edges_with_sccluster2_pred_ent.pkl；第一维代表着边类型 type，猜测和超类节点有关？
