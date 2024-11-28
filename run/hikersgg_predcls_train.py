@@ -42,7 +42,6 @@ conf = ModelConfig(f'''
 -adam
 -require_overlap_det
 -use_bpl
--use_sa
 -use_knowledge
 -use_embedding
 -filter_duplicate_rels

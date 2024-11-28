@@ -1,10 +1,34 @@
 {
   "HiKER-SGG": [
     {
+      "fileDescriptor": "$/dataloaders/visual_genome.py",
+      "linenumber": 488,
+      "name": "BPL: 加载数据集平衡",
+      "bookmarkType": "DIGIT_2"
+    },
+    {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 278,
+      "linenumber": 280,
       "name": "BPL\u0026SA: 成员变量赋值给局部变量",
       "bookmarkType": "LETTER_B"
+    },
+    {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 186,
+      "name": "BPL: Init 阶段创建独属于 BPL 方法的 MLP 层以及加载混淆矩阵",
+      "bookmarkType": "LETTER_C"
+    },
+    {
+      "fileDescriptor": "$/lib/object_detector.py",
+      "linenumber": 352,
+      "name": "Detector 的返回值",
+      "bookmarkType": "LETTER_I"
+    },
+    {
+      "fileDescriptor": "$/lib/object_detector.py",
+      "linenumber": 227,
+      "name": "扩充背景关系",
+      "bookmarkType": "LETTER_D"
     },
     {
       "fileDescriptor": "$/lib/my_model_24.py",
@@ -17,12 +41,6 @@
       "linenumber": 264,
       "name": "调用 GGNNRelReason",
       "bookmarkType": "LETTER_J"
-    },
-    {
-      "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 184,
-      "name": "BPL: Init 阶段创建独属于 BPL 方法的 MLP 层以及加载混淆矩阵",
-      "bookmarkType": "LETTER_C"
     },
     {
       "fileDescriptor": "$/lib/exp/train_fn.py",
@@ -47,24 +65,6 @@
       "linenumber": 95,
       "name": "锚框预处理",
       "bookmarkType": "LETTER_H"
-    },
-    {
-      "fileDescriptor": "$/lib/object_detector.py",
-      "linenumber": 349,
-      "name": "Detector 的返回值",
-      "bookmarkType": "LETTER_I"
-    },
-    {
-      "fileDescriptor": "$/lib/object_detector.py",
-      "linenumber": 224,
-      "name": "扩充背景关系",
-      "bookmarkType": "LETTER_D"
-    },
-    {
-      "fileDescriptor": "$/dataloaders/visual_genome.py",
-      "linenumber": 485,
-      "name": "BPL: 加载数据集平衡",
-      "bookmarkType": "DIGIT_2"
     },
     {
       "fileDescriptor": "$/lib/evaluation/sg_eval.py",

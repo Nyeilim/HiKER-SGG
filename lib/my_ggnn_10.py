@@ -52,6 +52,8 @@ class GGNN(Module):
         # 新增属性
         self.normalize_classifier = False
         self.pred_bridge_edge_initial = True
+        print("normalize_classifier: {} @ {}".format(self.normalize_classifier, __name__))
+        print("pred_bridge_edge_initial: {} @ {}".format(self.pred_bridge_edge_initial, __name__))
 
         if self.use_lrga is True:
             self.attention = ModuleList()

@@ -78,7 +78,8 @@ class ObjectDetector(nn.Module):
         self.use_resnet = use_resnet
         self.thresh = thresh
 
-        self.add_bg_rels = False # 是否添加背景关系
+        self.add_bg_rels = True # 是否添加背景关系，关闭时测试会出现 Somehow the relations weren't sorted properly
+        print("add_bg_rels: {} @ {}".format(self.add_bg_rels, __name__))
 
         if not self.use_resnet:
             vgg_model = load_vgg() # 使用 Pytorch VGG16 作为骨干网络，classifier 去掉最后的分类头
