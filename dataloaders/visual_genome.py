@@ -623,7 +623,6 @@ def whether_sample(target_pred:str, limit:int):
         'walking on': 1322, 'watching': 907, 'wearing': 48582, 'wears': 4939, 'with': 12215
     }
     target_count = pred_count[target_pred]
-    assert target_count > limit
     return np.random.random() < limit / target_count # 概率性地返回 True，这样遍历完训练集后，会有大概 limit 个该关系
 
 def whether_only_root_pred(rel_list:list, non_rel_revise:bool):
