@@ -86,6 +86,7 @@ EDGE_MATRIX = data_path('edge_matrix.npy')
 # =============================================================================
 # 全局变量
 BPL_LIMIT = 1000 # BPL 单个谓词上限
+BPL_TOPK_NUM = 20 # BPL 头部谓词数
 DIS_PROGRESS_BAR = True  # 是否禁用进度条
 ALPHA = 0.9 # 混淆矩阵更新权重
 MODES = ('sgdet', 'sgcls', 'predcls')

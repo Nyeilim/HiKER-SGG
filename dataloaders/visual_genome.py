@@ -7,6 +7,8 @@ import sys
 import numpy as np
 from os import environ as os_environ
 from collections import defaultdict
+
+from docutils.nodes import target
 from h5py import File as h5py_File
 from os.path import join as os_path_join, exists as os_path_exists
 from json import load as json_load
@@ -22,7 +24,8 @@ from torchvision.transforms import Resize, Compose, ToTensor, Normalize
 from pycocotools.coco import COCO
 from dataloaders.blob import Blob
 from lib.fpn.box_intersections_cpu.bbox import bbox_overlaps
-from config import VG_IMAGES, IM_DATA_FN, VG_SGG_FN, VG_SGG_DICT_FN, BOX_SCALE, IM_SCALE, PROPOSAL_FN, BPL_LIMIT
+from config import VG_IMAGES, IM_DATA_FN, VG_SGG_FN, VG_SGG_DICT_FN, BOX_SCALE, IM_SCALE, PROPOSAL_FN, BPL_LIMIT, \
+    BPL_TOPK_NUM
 from dataloaders.image_transforms import SquarePad, Grayscale, Brightness, Sharpness, Contrast, \
     RandomOrder, Hue, random_crop
 from PIL import ImageDraw
@@ -37,7 +40,7 @@ class VG(Dataset):
                  use_proposals=False, with_clean_classifier=None, get_state=False, caching=False, use_cache=False, test_n=False):
         """
         Torch dataset for VisualGenome
-        :param mode: Must be train, test, or val
+        :param mode: Must be `train`, `test`, or `val`
         :param roidb_file:  HDF5 containing the GT boxes, classes, and relationships
         :param dict_file: JSON Contains mapping of classes/relationships to words
         :param image_file: HDF5 containing image filenames
@@ -47,8 +50,6 @@ class VG(Dataset):
         :param num_im: Number of images in the entire dataset. -1 for all images.
         :param num_val_im: Number of images in the validation set (must be less than num_im
                unless num_im is -1.)
-        :param proposal_file: If None, we don't provide proposals. Otherwise file for where we get RPN
-            proposals
         """
         self.use_cache = use_cache
         self.caching = caching
@@ -64,8 +65,9 @@ class VG(Dataset):
         self.filter_non_overlap = filter_non_overlap
         self.filter_duplicate_rels = filter_duplicate_rels and self.mode == 'train'
 
+        # BPL 的改进项
         self.non_rel_revise = False # 空关系修正
-        print("non_rel_revise: {} @ {}".format(self.non_rel_revise, __name__))
+        self.random_balanced_sample = True # 随机平衡采样
 
         # 这个 dict_file 就是 VG-SGG-dicts.json
         self.ind_to_classes, self.ind_to_predicates = load_info(dict_file)  # contiguous 151, 51 containing __background__
@@ -75,8 +77,9 @@ class VG(Dataset):
             filter_non_overlap=self.filter_non_overlap and self.is_train,
             dict_file=dict_file,
             with_clean_classifier=with_clean_classifier,
-            non_rel_revise=self.non_rel_revise,
             ind_to_predicates=self.ind_to_predicates,
+            non_rel_revise=self.non_rel_revise,
+            random_balanced_sample=self.random_balanced_sample
         )
 
         self.filenames = load_image_filenames(image_file)
@@ -385,8 +388,11 @@ def load_image_filenames(image_file, image_dir=VG_IMAGES):
     return fns
 
 
-def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty_rels=True,
-                filter_non_overlap=False, dict_file=None, with_clean_classifier=None, ind_to_predicates=None, non_rel_revise = False):
+def load_graphs(
+        graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty_rels=True,
+        filter_non_overlap=False, dict_file=None, with_clean_classifier=None, ind_to_predicates=None,
+        non_rel_revise = False, random_balanced_sample = False
+):
     """
     Load the file containing the GT boxes and relations, as well as the dataset split
     :param graphs_file: HDF5
@@ -467,7 +473,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
     # gt_attributes = []
     relationships = []
     pred_topk = []
-    pred_num = 15
+    pred_num = BPL_TOPK_NUM
     pred_count=0
     # with open('./datasets/vg/VG-SGG-dicts-with-attri-info.json','r') as f:
     # 这个加载进来的是 VG-SGG-dicts.json 文件
@@ -478,7 +484,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
     # predicates_tree = json.load(open('./datasets/vg/predicate_wikipedia_count.json', 'r'))
     # 根据每个谓词的 count 数从大到小排序，最终出来个列表，每个元素都是个 map.entry，也就是元组，类似 ('on', 712409)
     predicates_sort = sorted(predicates_tree.items(), key=lambda x:x[1], reverse=True)
-    # 这里大概的意思是挑选出 count 在前 15(pred_num) 的谓词，放到 pred_topk 里面作为列表
+    # 这里大概的意思是挑选出 count 在 topk 的谓词，放到 pred_topk 里面作为列表
     for pred_i in predicates_sort:
         if pred_count >= pred_num:
             break
@@ -496,6 +502,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
     root_classes_count = {}
     leaf_classes_count = {}
     all_classes_count = {}
+    bpl_img_filter_out_count = 0
     # image_index 的元素内容是“可用图片”的索引【但是用不上】，索引 i 是“可用图片”的顺序号
     # 如 image_index[0] = 6526，表面第 0 张可用图片是数据集中的第 6526 张图片
     for i in range(len(image_index)):
@@ -526,7 +533,7 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
         # 外层循环在运行完上面的代码后，其实就已经完成单张图片 bbox，rel 的整理，下面分别是 重叠过滤 以及 BPL
         # ---------------------------------------------------------------------------
 
-        # 在训练时，是否过滤掉没有重叠 bbox 的图像，不重叠的 bbox 常常被认为是没有关系的
+        # 在训练时，是否过滤掉没有重叠 bbox 的图像，不重叠的 bbox 常常被认为是没有关系的，只有 sgdet 任务才打开这个开关
         if filter_non_overlap:
             assert mode == 'train'
             # construct BoxList object to apply boxlist_iou method
@@ -567,25 +574,20 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
                     if rel_i_pred not in root_classes_count:
                         root_classes_count[rel_i_pred] = 0
                     # 这里人为限定：包含某个头部谓词的三元组，其样本数量不能超过 1000
-                    if root_classes_count[rel_i_pred] < BPL_LIMIT: # Adjust the intensity of BPL here
+                    if ((not random_balanced_sample and root_classes_count[rel_i_pred] < BPL_LIMIT)
+                            or (random_balanced_sample and whether_sample(rel_i_pred, BPL_LIMIT))):
                         rel_temp.append(rel_i_root)
                         root_classes_count[rel_i_pred] = root_classes_count[rel_i_pred] + 1
-                    elif non_rel_revise:
-                        # 多余的头部谓词将其标记为 -1 redundant_pred，意为冗余谓词
-                        rel_i_root[2] = -1
-                        rel_temp.append(rel_i_root)
-
-            only_root_pred = False
-            if non_rel_revise and all(rel[2] == -1 for rel in rel_temp):
-                only_root_pred = True
-            elif not non_rel_revise and len(rel_temp) == 0:
-                only_root_pred = True
+                    else:
+                        redundant_pred_process(rel_i_root, rel_temp, non_rel_revise)
 
             # 过滤仅包含多余头部谓词的图片样本
+            only_root_pred = whether_only_root_pred(rel_temp, non_rel_revise)
             if only_root_pred:
                 # 空关系修正的情况，实际上并不能完全过滤，需要在 vg_collate 处添加二次过滤，因为某些尾部谓词可能在后续的处理中被去掉，导致该图片仍只留下多余头部谓词
                 # 可断点观察 image_index[i] == 35124 的样本，它在 Blob.append() 的信息为 'index': 9016, 'fn': '/root/VG_100K/2386175.jpg'
                 split_mask[image_index[i]] = 0
+                bpl_img_filter_out_count += 1
                 continue
             else:
                 assert not all(rel[2] == -1 for rel in rel_temp)
@@ -596,7 +598,49 @@ def load_graphs(graphs_file, mode='train', num_im=-1, num_val_im=0, filter_empty
         gt_classes.append(gt_classes_i)
         relationships.append(rels)
 
+    if with_clean_classifier and mode == 'train':
+        print("~~~~~~~BPL Filter Result~~~~~~")
+        print("BPL Limit: {}, BPL TopK Num: {}".format(BPL_LIMIT, BPL_TOPK_NUM))
+        print("BPL:non_rel_revise: {} @ {}".format(non_rel_revise, __name__))
+        print("BPL:random_balanced_sample: {} @ {}".format(random_balanced_sample, __name__))
+        print("BPL:filter out images: {}".format(bpl_img_filter_out_count))
+        print("origin_pred_count = {}".format(all_classes_count))
+        print("root_pred_count = {}".format(root_classes_count))
+        print("leaf_pred_count = {}".format(leaf_classes_count))
+
     return split_mask, boxes, gt_classes, relationships
+
+def whether_sample(target_pred:str, limit:int):
+    # 这个东西是我调试的时候从 all_classes_count 中弄到的
+    pred_count = {
+        'above': 8411, 'across': 263, 'against': 224, 'along': 493, 'and': 679, 'at': 2109, 'attached to': 1586,
+        'behind': 13047, 'belonging to': 652, 'between': 511, 'carrying': 1705, 'covered in': 485, 'covering': 512,
+        'eating': 702, 'flying in': 5, 'for': 1116, 'from': 198, 'growing on': 172, 'hanging from': 807, 'has': 69007,
+        'holding': 11482, 'in': 24470, 'in front of': 3808, 'laying on': 779, 'looking at': 1026, 'lying on': 369,
+        'made of': 128, 'mounted on': 265, 'near': 20759, 'of': 32770, 'on': 118037, 'on back of': 343, 'over': 1277,
+        'painted on': 153, 'parked on': 641, 'part of': 435, 'playing': 134, 'riding': 4507, 'says': 49,
+        'sitting on': 5355, 'standing on': 2496, 'to': 327, 'under': 4732, 'using': 580, 'walking in': 289,
+        'walking on': 1322, 'watching': 907, 'wearing': 48582, 'wears': 4939, 'with': 12215
+    }
+    target_count = pred_count[target_pred]
+    assert target_count > limit
+    return np.random.random() < limit / target_count # 概率性地返回 True，这样遍历完训练集后，会有大概 limit 个该关系
+
+def whether_only_root_pred(rel_list:list, non_rel_revise:bool):
+    only_root_pred = False
+    if non_rel_revise and all(rel[2] == -1 for rel in rel_list):
+        only_root_pred = True
+    elif not non_rel_revise and len(rel_list) == 0:
+        only_root_pred = True
+
+    return only_root_pred
+
+def redundant_pred_process(rel_i_root, rel_temp, non_rel_revise:bool):
+    # 如果没开启空关系修正，对多余的头部谓词就不用标记
+    if non_rel_revise:
+        # 多余的头部谓词将其标记为 -1 redundant_pred，意为冗余谓词
+        rel_i_root[2] = -1
+        rel_temp.append(rel_i_root)
 
 
 def load_info(info_file):
