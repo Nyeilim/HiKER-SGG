@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import numpy as np
 import pyximport
 import sys
@@ -24,7 +26,11 @@ conf = ModelConfig(f'''
 ''')
 
 train_full, train_full_loader = provide_dataloader(conf, 'train')
+test, test_loader = provide_dataloader(conf, 'test')
 ind_to_classes, ind_to_predicates = train_full.ind_to_classes, train_full.ind_to_predicates
+all_pred_in_train = defaultdict(int)
+all_pred_in_test = defaultdict(int)
+all_pred_in_dataset = defaultdict(int)
 
 for entry in train_full:
     gt_rels = entry['gt_relations']
@@ -36,12 +42,35 @@ for entry in train_full:
         p = rel[2]
         edge_matrix[s][o][p] += 1
 
-        if verbose:
-            print('<{},{},{}>'.format(ind_to_classes[s], ind_to_predicates[p], ind_to_classes[o]))
-        if 0 == p:
-            non_rel_count += 1
-        if 0 == s or 0 == o:
-            bg_count += 1
+        _subject = ind_to_classes[s]
+        _predicate = ind_to_predicates[p]
+        _object = ind_to_classes[o]
+        all_pred_in_train[_predicate] += 1
+        all_pred_in_dataset[_predicate] += 1
 
-print('non_rel_count:{}, bg_count:{}'.format(non_rel_count, bg_count)) # result: 0,0
-np.save(file, edge_matrix)
+        if verbose:
+            print('<{},{},{}>'.format(_subject, _predicate, _object))
+
+for entry in test:
+    gt_rels = entry['gt_relations']
+    gt_classes = entry['gt_classes']
+
+    for rel in gt_rels:
+        s = gt_classes[rel[0]]
+        o = gt_classes[rel[1]]
+        p = rel[2]
+        edge_matrix[s][o][p] += 1
+
+        _subject = ind_to_classes[s]
+        _predicate = ind_to_predicates[p]
+        _object = ind_to_classes[o]
+        all_pred_in_test[_predicate] += 1
+        all_pred_in_dataset[_predicate] += 1
+
+        if verbose:
+            print('<{},{},{}>'.format(_subject, _predicate, _object))
+
+print(all_pred_in_train)
+print(all_pred_in_test)
+print(all_pred_in_dataset)
+# np.save(file, edge_matrix)
