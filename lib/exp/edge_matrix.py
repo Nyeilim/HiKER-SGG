@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 import numpy as np
 import pyximport
@@ -31,10 +31,14 @@ ind_to_classes, ind_to_predicates = train_full.ind_to_classes, train_full.ind_to
 all_pred_in_train = defaultdict(int)
 all_pred_in_test = defaultdict(int)
 all_pred_in_dataset = defaultdict(int)
+train_img_count, test_img_count, all_img_count = 0,0,0
+train_rels_count, test_rels_count, all_rels_count = 0,0,0
 
 for entry in train_full:
     gt_rels = entry['gt_relations']
     gt_classes = entry['gt_classes']
+    train_img_count += 1
+    all_img_count += 1
 
     for rel in gt_rels:
         s = gt_classes[rel[0]]
@@ -54,6 +58,8 @@ for entry in train_full:
 for entry in test:
     gt_rels = entry['gt_relations']
     gt_classes = entry['gt_classes']
+    test_img_count += 1
+    all_img_count += 1
 
     for rel in gt_rels:
         s = gt_classes[rel[0]]
@@ -70,7 +76,11 @@ for entry in test:
         if verbose:
             print('<{},{},{}>'.format(_subject, _predicate, _object))
 
-print(all_pred_in_train)
-print(all_pred_in_test)
-print(all_pred_in_dataset)
+all_pred_in_train = OrderedDict(sorted(all_pred_in_train.items(), key=lambda item: item[1], reverse=True))
+all_pred_in_test = OrderedDict(sorted(all_pred_in_test.items(), key=lambda item: item[1], reverse=True))
+all_pred_in_dataset = OrderedDict(sorted(all_pred_in_dataset.items(), key=lambda item: item[1], reverse=True))
+
+print('train | images:{} rels:{} predicates:{}'.format(train_img_count, train_rels_count, all_pred_in_train))
+print('train | images:{} rels:{} predicates:{}'.format(test_img_count, test_rels_count, all_pred_in_test))
+print('train | images:{} rels:{} predicates:{}'.format(all_img_count, all_rels_count, all_pred_in_dataset))
 # np.save(file, edge_matrix)
