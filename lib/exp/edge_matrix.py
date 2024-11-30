@@ -51,6 +51,8 @@ for entry in train_full:
         _object = ind_to_classes[o]
         all_pred_in_train[_predicate] += 1
         all_pred_in_dataset[_predicate] += 1
+        train_rels_count += 1
+        all_rels_count += 1
 
         if verbose:
             print('<{},{},{}>'.format(_subject, _predicate, _object))
@@ -72,6 +74,8 @@ for entry in test:
         _object = ind_to_classes[o]
         all_pred_in_test[_predicate] += 1
         all_pred_in_dataset[_predicate] += 1
+        test_rels_count += 1
+        all_rels_count += 1
 
         if verbose:
             print('<{},{},{}>'.format(_subject, _predicate, _object))
@@ -81,6 +85,6 @@ all_pred_in_test = OrderedDict(sorted(all_pred_in_test.items(), key=lambda item:
 all_pred_in_dataset = OrderedDict(sorted(all_pred_in_dataset.items(), key=lambda item: item[1], reverse=True))
 
 print('train | images:{} rels:{} predicates:{}'.format(train_img_count, train_rels_count, all_pred_in_train))
-print('train | images:{} rels:{} predicates:{}'.format(test_img_count, test_rels_count, all_pred_in_test))
-print('train | images:{} rels:{} predicates:{}'.format(all_img_count, all_rels_count, all_pred_in_dataset))
+print('test | images:{} rels:{} predicates:{}'.format(test_img_count, test_rels_count, all_pred_in_test))
+print('all | images:{} rels:{} predicates:{}'.format(all_img_count, all_rels_count, all_pred_in_dataset))
 # np.save(file, edge_matrix)
