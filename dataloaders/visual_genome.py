@@ -8,7 +8,6 @@ import numpy as np
 from os import environ as os_environ
 from collections import defaultdict
 
-from docutils.nodes import target
 from h5py import File as h5py_File
 from os.path import join as os_path_join, exists as os_path_exists
 from json import load as json_load
@@ -67,7 +66,7 @@ class VG(Dataset):
 
         # BPL 的改进项
         self.non_rel_revise = False # 空关系修正
-        self.random_balanced_sample = True # 随机平衡采样
+        self.random_balanced_sample = False # 随机平衡采样
 
         # 这个 dict_file 就是 VG-SGG-dicts.json
         self.ind_to_classes, self.ind_to_predicates = load_info(dict_file)  # contiguous 151, 51 containing __background__
