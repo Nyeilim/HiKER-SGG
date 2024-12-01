@@ -65,8 +65,8 @@ class VG(Dataset):
         self.filter_duplicate_rels = filter_duplicate_rels and self.mode == 'train'
 
         # BPL 的改进项
-        self.non_rel_revise = True # 空关系修正
-        self.random_balanced_sample = True # 随机平衡采样
+        self.non_rel_revise = False # 空关系修正
+        self.random_balanced_sample = False # 随机平衡采样
 
         # 这个 dict_file 就是 VG-SGG-dicts.json
         self.ind_to_classes, self.ind_to_predicates = load_info(dict_file)  # contiguous 151, 51 containing __background__

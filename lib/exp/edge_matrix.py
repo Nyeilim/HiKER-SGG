@@ -26,7 +26,7 @@ conf = ModelConfig(f'''
 ''')
 
 train_full, train_full_loader = provide_dataloader(conf, 'train')
-test, test_loader = provide_dataloader(conf, 'test')
+# test, test_loader = provide_dataloader(conf, 'test')
 ind_to_classes, ind_to_predicates = train_full.ind_to_classes, train_full.ind_to_predicates
 all_pred_in_train = defaultdict(int)
 all_pred_in_test = defaultdict(int)
@@ -57,34 +57,34 @@ for entry in train_full:
         if verbose:
             print('<{},{},{}>'.format(_subject, _predicate, _object))
 
-for entry in test:
-    gt_rels = entry['gt_relations']
-    gt_classes = entry['gt_classes']
-    test_img_count += 1
-    all_img_count += 1
-
-    for rel in gt_rels:
-        s = gt_classes[rel[0]]
-        o = gt_classes[rel[1]]
-        p = rel[2]
-        edge_matrix[s][o][p] += 1
-
-        _subject = ind_to_classes[s]
-        _predicate = ind_to_predicates[p]
-        _object = ind_to_classes[o]
-        all_pred_in_test[_predicate] += 1
-        all_pred_in_dataset[_predicate] += 1
-        test_rels_count += 1
-        all_rels_count += 1
-
-        if verbose:
-            print('<{},{},{}>'.format(_subject, _predicate, _object))
+# for entry in test:
+#     gt_rels = entry['gt_relations']
+#     gt_classes = entry['gt_classes']
+#     test_img_count += 1
+#     all_img_count += 1
+#
+#     for rel in gt_rels:
+#         s = gt_classes[rel[0]]
+#         o = gt_classes[rel[1]]
+#         p = rel[2]
+#         edge_matrix[s][o][p] += 1
+#
+#         _subject = ind_to_classes[s]
+#         _predicate = ind_to_predicates[p]
+#         _object = ind_to_classes[o]
+#         all_pred_in_test[_predicate] += 1
+#         all_pred_in_dataset[_predicate] += 1
+#         test_rels_count += 1
+#         all_rels_count += 1
+#
+#         if verbose:
+#             print('<{},{},{}>'.format(_subject, _predicate, _object))
 
 all_pred_in_train = OrderedDict(sorted(all_pred_in_train.items(), key=lambda item: item[1], reverse=True))
-all_pred_in_test = OrderedDict(sorted(all_pred_in_test.items(), key=lambda item: item[1], reverse=True))
-all_pred_in_dataset = OrderedDict(sorted(all_pred_in_dataset.items(), key=lambda item: item[1], reverse=True))
+# all_pred_in_test = OrderedDict(sorted(all_pred_in_test.items(), key=lambda item: item[1], reverse=True))
+# all_pred_in_dataset = OrderedDict(sorted(all_pred_in_dataset.items(), key=lambda item: item[1], reverse=True))
 
 print('train | images:{} rels:{} predicates:{}'.format(train_img_count, train_rels_count, all_pred_in_train))
-print('test | images:{} rels:{} predicates:{}'.format(test_img_count, test_rels_count, all_pred_in_test))
-print('all | images:{} rels:{} predicates:{}'.format(all_img_count, all_rels_count, all_pred_in_dataset))
+# print('test | images:{} rels:{} predicates:{}'.format(test_img_count, test_rels_count, all_pred_in_test))
+# print('all | images:{} rels:{} predicates:{}'.format(all_img_count, all_rels_count, all_pred_in_dataset))
 # np.save(file, edge_matrix)
