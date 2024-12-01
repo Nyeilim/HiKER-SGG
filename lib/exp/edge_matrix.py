@@ -22,6 +22,7 @@ conf = ModelConfig(f'''
 -m predcls
 -b 8
 -ngpu 1
+-use_bpl
 -nwork 24
 ''')
 
