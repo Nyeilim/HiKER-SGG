@@ -1,7 +1,7 @@
 from typing import List, Dict, Any
 
 import numpy as np
-from torch import autocast
+from torch.cuda.amp import autocast
 from torch.utils.data import Dataset
 from apex import amp
 
@@ -29,7 +29,7 @@ def finetune(model, conf):
     train_full, train_full_loader = provide_dataloader(conf, 'confusion_matrix_val')
     model.eval()
     for raw_sample, (idx, sample) in zip(train_full, enumerate(train_full_loader)):
-        with autocast:
+        with autocast():
             boxes, objs, obj_scores, rels, pred_scores = model[sample]
 
         gt_rels = raw_sample['gt_relations'][:2]  # 拿到样本标注的关系对 <s,o>
