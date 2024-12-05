@@ -1,6 +1,18 @@
 {
   "HiKER-SGG": [
     {
+      "fileDescriptor": "$/lib/my_model_24.py",
+      "linenumber": 318,
+      "name": "推理时添加所有潜在关系",
+      "bookmarkType": "LETTER_L"
+    },
+    {
+      "fileDescriptor": "$/lib/surgery.py",
+      "linenumber": 58,
+      "name": "返回推理结果",
+      "bookmarkType": "LETTER_G"
+    },
+    {
       "fileDescriptor": "$/dataloaders/visual_genome.py",
       "linenumber": 493,
       "name": "BPL: 加载数据集平衡",
@@ -27,7 +39,7 @@
     {
       "fileDescriptor": "$/lib/object_detector.py",
       "linenumber": 227,
-      "name": "扩充背景关系",
+      "name": "训练时扩充背景关系",
       "bookmarkType": "LETTER_D"
     },
     {

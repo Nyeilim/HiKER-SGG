@@ -25,7 +25,7 @@ conf = ModelConfig(f'''
 -nwork 24
 ''')
 
-train_full, train_full_loader = provide_dataloader(conf, 'train')
+train_full, train_full_loader = provide_dataloader(conf, 'confusion_matrix_val')
 # test, test_loader = provide_dataloader(conf, 'test')
 ind_to_classes, ind_to_predicates = train_full.ind_to_classes, train_full.ind_to_predicates
 all_pred_in_train = defaultdict(int)

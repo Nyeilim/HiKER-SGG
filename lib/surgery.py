@@ -41,20 +41,20 @@ def filter_dets(boxes, obj_scores, obj_classes, rel_inds, pred_scores):
     assert rel_inds.size(1) == 2
     assert pred_scores.size(0) == num_rel
 
-    obj_scores0 = obj_scores.data[rel_inds[:,0]]
-    obj_scores1 = obj_scores.data[rel_inds[:,1]]
+    obj_scores0 = obj_scores.data[rel_inds[:,0]] # s 的预测得分
+    obj_scores1 = obj_scores.data[rel_inds[:,1]] # o 的预测得分
 
-    pred_scores_max, pred_classes_argmax = pred_scores.data[:,1:].max(1)
+    pred_scores_max, pred_classes_argmax = pred_scores.data[:,1:].max(1) # 返回最大预测概率，以及对应的索引
     pred_classes_argmax = pred_classes_argmax + 1
 
-    rel_scores_argmaxed = pred_scores_max * obj_scores0 * obj_scores1
-    rel_scores_vs, rel_scores_idx = torch.sort(rel_scores_argmaxed.view(-1), dim=0, descending=True)
+    rel_scores_argmaxed = pred_scores_max * obj_scores0 * obj_scores1 # <s,p,o> 三元组的综合分数
+    rel_scores_vs, rel_scores_idx = torch.sort(rel_scores_argmaxed.view(-1), dim=0, descending=True) # 将综合分数降序排序，返回排序结果及位置索引
 
-    rels = rel_inds[rel_scores_idx].cpu().numpy()
-    pred_scores_sorted = pred_scores[rel_scores_idx].data.cpu().numpy()
-    obj_scores_np = obj_scores.data.cpu().numpy()
-    objs_np = obj_classes.data.cpu().numpy()
-    boxes_out = boxes.data.cpu().numpy()
+    rels = rel_inds[rel_scores_idx].cpu().numpy() # 根据位置索引 rel_scores_id 调整返回结果的顺序，shape(num_rels, 2)
+    pred_scores_sorted = pred_scores[rel_scores_idx].data.cpu().numpy() # 同上，shape(num_rels, 51)
+    obj_scores_np = obj_scores.data.cpu().numpy() # shape(num_boxes,)
+    objs_np = obj_classes.data.cpu().numpy() # shape(num_boxes,)
+    boxes_out = boxes.data.cpu().numpy() # shape(num_boxes, 4)
 
     return boxes_out, objs_np, obj_scores_np, rels, pred_scores_sorted
 

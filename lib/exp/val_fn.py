@@ -27,13 +27,14 @@ def val_batch(
         det_res = [det_res]
 
     for i, (boxes_i, objs_i, obj_scores_i, rels_i, pred_scores_i) in enumerate(det_res):
+        # 真实标注
         gt_entry = {
             'gt_classes': val.gt_classes[batch_num + i].copy(),
             'gt_relations': val.relationships[batch_num + i].copy(),
             'gt_boxes': val.gt_boxes[batch_num + i].copy(),
         }
         assert np.all(objs_i[rels_i[:, 0]] > 0) and np.all(objs_i[rels_i[:, 1]] > 0)
-
+        # 预测结果
         pred_entry = {
             'pred_boxes': boxes_i * BOX_SCALE / IM_SCALE,
             'pred_classes': objs_i,
