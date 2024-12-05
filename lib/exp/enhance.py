@@ -45,7 +45,7 @@ def finetune(model, conf):
             all_gt_rels_scores.append((idx, gt_rel, score_max))
 
     # 循环结束后，我们会拿到所有标注样本的置信概率，按照置信概率降序排序，取前 10%；然后按照图片索引升序排序
-    need = len(all_gt_rels_scores) / 10
+    need = len(all_gt_rels_scores) // 10
     all_gt_rels_scores = sorted(all_gt_rels_scores, key=lambda item: item[2], reverse=True)[:need]
     all_gt_rels_scores = sorted(all_gt_rels_scores, key=lambda item: item[0])
 
@@ -104,7 +104,7 @@ class FinetuneImage:
 
     def __init__(self, entry):
         self.img = entry['img']
-        self.im_size = entry['im_size']
+        self.img_size = entry['img_size']
         self.gt_boxes = entry['gt_boxes']
         self.gt_classes = entry['gt_classes']
         self.gt_relations = entry['gt_relations']
@@ -122,7 +122,7 @@ class FinetuneSet(Dataset):
     def __getitem__(self, index) -> Dict[str, Any]:
         entry = {
             'img': self.images[index].img,  # 放缩后的图像
-            'img_size': self.images[index].im_size,  # 放缩后尺寸及放缩比例
+            'img_size': self.images[index].img_size,  # 放缩后尺寸及放缩比例
             'gt_boxes': self.images[index].gt_boxes,  # 未放缩的 gt_box 坐标，shape(num_box, 4)
             'gt_classes': self.images[index].gt_classes,  # s,o 索引标注，shape(num_box,)
             'gt_relations': self.images[index].gt_relations,  # 关系（三元组），shape(num_rels, 3)
