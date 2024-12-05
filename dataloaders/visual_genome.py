@@ -36,7 +36,7 @@ class VG(Dataset):
     def __init__(self, mode, roidb_file=VG_SGG_FN, dict_file=VG_SGG_DICT_FN,
                  image_file=IM_DATA_FN, filter_empty_rels=True, num_im=-1, num_val_im=5000,
                  filter_duplicate_rels=True, filter_non_overlap=True,
-                 use_proposals=False, with_clean_classifier=None, get_state=False, caching=False, use_cache=False, test_n=False):
+                 use_proposals=False, with_clean_classifier=None, caching=False, use_cache=False, test_n=False):
         """
         Torch dataset for VisualGenome
         :param mode: Must be `train`, `test`, or `val`

@@ -15,7 +15,7 @@ def finetune(model, conf):
     """
     里面写的东西应该接在 test 后
     1. 用原模型过次 train_full 数据集，记录下关系的“置信概率”
-    2. 挑选“置信概率”前 2000 的关系，以此构造新的精选集，用于微调分类头
+    2. 挑选“置信概率”前 10% 的关系，以此构造新的精选集，用于微调分类头
     3. 进入训练模式，微调分类头；返回微调后的模型对象
     :param model: 来自 hikersgg_predcls_test.py
     :param conf: 来自 hikersgg_predcls_test.py
@@ -32,9 +32,9 @@ def finetune(model, conf):
         with autocast():
             boxes, objs, obj_scores, rels, pred_scores = model[sample]
 
-        gt_rels = raw_sample['gt_relations'][:2]  # 拿到样本标注的关系对 <s,o>
+        gt_rels = raw_sample['gt_relations'][:, :2]  # 拿到样本标注的关系对 <s,o>
         for gt_rel in gt_rels:
-            rel_idx = None
+            rel_idx = None # 样本标注的关系对，在预测结果 rels 中的下标
             for i, rel in enumerate(rels):
                 if np.array_equal(gt_rel, rel):
                     rel_idx = i
@@ -44,8 +44,9 @@ def finetune(model, conf):
             score_max = score[1:].max()  # 拿到预测的最大置信概率
             all_gt_rels_scores.append((idx, gt_rel, score_max))
 
-    # 循环结束后，我们会拿到所有标注样本的置信概率，按照置信概率降序排序，取前 2000 个；然后按照图片索引升序排序
-    all_gt_rels_scores = sorted(all_gt_rels_scores, key=lambda item: item[2], reverse=True)[:2000]
+    # 循环结束后，我们会拿到所有标注样本的置信概率，按照置信概率降序排序，取前 10%；然后按照图片索引升序排序
+    need = len(all_gt_rels_scores) / 10
+    all_gt_rels_scores = sorted(all_gt_rels_scores, key=lambda item: item[2], reverse=True)[:need]
     all_gt_rels_scores = sorted(all_gt_rels_scores, key=lambda item: item[0])
 
     # 手动构造精选集 finetune_set
@@ -54,7 +55,7 @@ def finetune(model, conf):
     print("finetune set count: {}".format(len(img_idxes)))
     for idx in img_idxes:
         img_gt_rels_scores = [row for row in all_gt_rels_scores if row[0] == idx] # 筛选出属于某个 idx 的所有关系分数
-        img_gt_rels = {item[1] for item in img_gt_rels_scores} # 二元组 <s, o>
+        img_gt_rels = {tuple(item[1]) for item in img_gt_rels_scores} # 二元组 <s, o>
 
         raw_image = train_full[idx] # 原始图片数据
         raw_gt_rels = raw_image['gt_relations'] # 原始关系（三元组），shape(num_rels, 3)
@@ -73,7 +74,7 @@ def finetune(model, conf):
     model.train()
 
     # 利用精选集构造 DataLoader，然后进行锁住除分类头的其他参数，进行微调
-    _, finetune_set_loader = VGDataLoader.splits(
+    finetune_set_loader, _ = VGDataLoader.splits(
         finetune_set,
         finetune_set,
         mode='rel',  # rel 会传给 Blob 当构造参数
