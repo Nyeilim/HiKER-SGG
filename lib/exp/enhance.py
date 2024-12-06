@@ -34,7 +34,7 @@ def finetune(model, conf):
 
         gt_rels = raw_sample['gt_relations'][:, :2]  # 拿到样本标注的关系对 <s,o>
         for gt_rel in gt_rels:
-            rel_idx = None # 样本标注的关系对，在预测结果 rels 中的下标
+            rel_idx = None  # 样本标注的关系对，在预测结果 rels 中的下标
             for i, rel in enumerate(rels):
                 if np.array_equal(gt_rel, rel):
                     rel_idx = i
@@ -54,18 +54,18 @@ def finetune(model, conf):
     img_idxes = {item[0] for item in all_gt_rels_scores}
     print("finetune set count: {}".format(len(img_idxes)))
     for idx in img_idxes:
-        img_gt_rels_scores = [row for row in all_gt_rels_scores if row[0] == idx] # 筛选出属于某个 idx 的所有关系分数
-        img_gt_rels = {tuple(item[1]) for item in img_gt_rels_scores} # 二元组 <s, o>
+        img_gt_rels_scores = [row for row in all_gt_rels_scores if row[0] == idx]  # 筛选出属于某个 idx 的所有关系分数
+        img_gt_rels = {tuple(item[1]) for item in img_gt_rels_scores}  # 二元组 <s, o>
 
-        raw_image = train_full[idx] # 原始图片数据
-        raw_gt_rels = raw_image['gt_relations'] # 原始关系（三元组），shape(num_rels, 3)
-        filtered_gt_rels = [] # 过滤后的三元组
+        raw_image = train_full[idx]  # 原始图片数据
+        raw_gt_rels = raw_image['gt_relations']  # 原始关系（三元组），shape(num_rels, 3)
+        filtered_gt_rels = []  # 过滤后的三元组
         for raw_gt_rel in raw_gt_rels:
             if tuple(raw_gt_rel[:2]) in img_gt_rels:
                 filtered_gt_rels.append(raw_gt_rel)
         if full_raw_rels:
             filtered_gt_rels = raw_gt_rels
-        raw_image['gt_relations'] = filtered_gt_rels # 将过滤后的三元组转正
+        raw_image['gt_relations'] = np.array(filtered_gt_rels)  # 将过滤后的三元组转正
 
         # 构造对象 FinetuneImage
         image = FinetuneImage(raw_image)
@@ -86,8 +86,8 @@ def finetune(model, conf):
     # 冻结参数
     print('start freezing model params')
     for name, param in model.named_parameters():
-        if name.endswith('_clean'):
-            print("{} unfreeze.")
+        if '_clean' in name:
+            print("{} unfreeze.".format(name))
             continue
         param.requires_grad = False
 
@@ -97,8 +97,9 @@ def finetune(model, conf):
     for batch_idx, batch in enumerate(finetune_set_loader):
         train_batch(model, conf, batch, optimizer)
 
-    # 返回训练后的模型
-    return model
+    print('~~~~~~ finetune finish ~~~~~~')
+    return model  # 返回训练后的模型
+
 
 class FinetuneImage:
 
