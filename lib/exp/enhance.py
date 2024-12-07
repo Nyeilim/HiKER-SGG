@@ -91,7 +91,7 @@ def finetune(model, conf):
             continue
         param.requires_grad = False
 
-    # 开始训练，训练一次
+    # 开始训练，训练一次 报错 Process finished with exit code 137
     optimizer = get_optim(model, conf)
     model, optimizer = amp.initialize(model, optimizer, opt_level="O0")
     for batch_idx, batch in enumerate(finetune_set_loader):

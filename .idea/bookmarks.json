@@ -1,6 +1,24 @@
 {
   "HiKER-SGG": [
     {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 280,
+      "name": "BPL\u0026SA: 成员变量赋值给局部变量",
+      "bookmarkType": "LETTER_B"
+    },
+    {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 186,
+      "name": "BPL: Init 阶段创建独属于 BPL 方法的 MLP 层以及加载混淆矩阵",
+      "bookmarkType": "LETTER_C"
+    },
+    {
+      "fileDescriptor": "$/lib/my_ggnn_10.py",
+      "linenumber": 35,
+      "name": "BPL\u0026SA: 外部变量赋值给成员变量",
+      "bookmarkType": "LETTER_A"
+    },
+    {
       "fileDescriptor": "$/lib/my_model_24.py",
       "linenumber": 318,
       "name": "推理时添加所有潜在关系",
@@ -17,18 +35,6 @@
       "linenumber": 493,
       "name": "BPL: 加载数据集平衡",
       "bookmarkType": "DIGIT_2"
-    },
-    {
-      "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 280,
-      "name": "BPL\u0026SA: 成员变量赋值给局部变量",
-      "bookmarkType": "LETTER_B"
-    },
-    {
-      "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 186,
-      "name": "BPL: Init 阶段创建独属于 BPL 方法的 MLP 层以及加载混淆矩阵",
-      "bookmarkType": "LETTER_C"
     },
     {
       "fileDescriptor": "$/lib/object_detector.py",
@@ -65,12 +71,6 @@
       "linenumber": 16,
       "name": "打印进度条",
       "bookmarkType": "LETTER_Z"
-    },
-    {
-      "fileDescriptor": "$/lib/my_ggnn_10.py",
-      "linenumber": 35,
-      "name": "BPL\u0026SA: 外部变量赋值给成员变量",
-      "bookmarkType": "LETTER_A"
     },
     {
       "fileDescriptor": "$/dataloaders/blob.py",

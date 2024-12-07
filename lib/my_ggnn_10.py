@@ -247,7 +247,7 @@ class GGNN(Module):
         edges_img_pred2obj[arange(num_img_pred), rel_inds[:, 1]] = 1 # 使用这个矩阵，对于某个特定的 SP 节点【行】，我们可以找到其 CE Object【列】
         edges_img_subj2pred = edges_img_pred2subj.t()
         edges_img_obj2pred = edges_img_pred2obj.t()
-        
+
         # Bridge Edge 桥边
         ## SE/CE 之间的桥边，使用独热编码的标注，作为邻接矩阵的值；使用该矩阵，对于某个特定的 SE 节点，我们可以找到其 CE 节点
         edges_img2ont_ent = torch.zeros((num_img_ent, self.num_ont_ent), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
@@ -286,11 +286,11 @@ class GGNN(Module):
         ent_cls_score = None
         scpred_cls_score = None
         scent_cls_score = None
-        
+
         # 中间变量
         pred_cls_logits = None
         ent_cls_logits = None
-        
+
         # 这行代码没用
         if with_clean_classifier and with_transfer:
             pred_adj_nor = self.pred_adj_nor
@@ -328,13 +328,13 @@ class GGNN(Module):
                 torch.mm(edges_img_pred2obj, message_send_img_ent),
                 torch.mm(edges_img2ont_pred, message_send_ont_pred),
             ], 1))
-            
+
             del message_send_ont_pred, message_send_img_ent
-            
+
             # 上面这段就是信息传递的过程，最后四种节点的维度都是 1024
             # ----------------------------
             # 下面这段就是 GRU Rules
-            
+
             z_ont_ent = torch.sigmoid(self.fc_eq3_w_ont_ent(message_received_ont_ent) + self.fc_eq3_u_ont_ent(nodes_ont_ent)) # 更新门
             r_ont_ent = torch.sigmoid(self.fc_eq4_w_ont_ent(message_received_ont_ent) + self.fc_eq4_u_ont_ent(nodes_ont_ent)) # 重置门
             h_ont_ent = torch.tanh(self.fc_eq5_w_ont_ent(message_received_ont_ent) + self.fc_eq5_u_ont_ent(r_ont_ent * nodes_ont_ent)) # 候选隐状态
@@ -363,9 +363,9 @@ class GGNN(Module):
             del message_received_img_pred, r_img_pred
             nodes_img_pred = (1 - z_img_pred) * nodes_img_pred + z_img_pred * h_img_pred
             del z_img_pred, h_img_pred
-            
+
             # ---------------------
-            
+
             if self.use_lrga is True: # False
                 nodes_img_pred = self.dimension_reduce[t](torch.cat((self.attention[t](original_vr), nodes_img_pred), dim=1))
                 if t != self.time_step_num - 1:
@@ -399,5 +399,5 @@ class GGNN(Module):
         pred_cls_score, scpred_cls_score = hierarchical_pred_reasoning(pred_cls_logits, with_transfer)
         if refine_obj_cls:  # False
             ent_cls_score, scent_cls_score = hierarchical_ent_reasoning(ent_cls_logits)
-        
+
         return pred_cls_score, ent_cls_score, scpred_cls_score, scent_cls_score
