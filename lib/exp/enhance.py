@@ -74,6 +74,7 @@ def finetune(model, conf):
 
     model.train()
     gc.collect()
+    print('start building dataloader')
 
     # 利用精选集构造 DataLoader，然后进行锁住除分类头的其他参数，进行微调
     finetune_set_loader, _ = VGDataLoader.splits(
