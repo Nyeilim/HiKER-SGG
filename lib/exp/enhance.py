@@ -54,6 +54,7 @@ def finetune(model, conf):
     finetune_set = FinetuneSet()
     img_idxes = {item[0] for item in all_gt_rels_scores}
     print("finetune set count: {}".format(len(img_idxes)))
+    gc.collect() # 下面这个 for 循环好像有内存泄露，难道是我构造的对象太多？
     for idx in img_idxes:
         img_gt_rels_scores = [row for row in all_gt_rels_scores if row[0] == idx]  # 筛选出属于某个 idx 的所有关系分数
         img_gt_rels = {tuple(item[1]) for item in img_gt_rels_scores}  # 二元组 <s, o>
@@ -73,7 +74,6 @@ def finetune(model, conf):
         finetune_set.append(image)
 
     model.train()
-    gc.collect()
     print('start building dataloader')
 
     # 利用精选集构造 DataLoader，然后进行锁住除分类头的其他参数，进行微调
