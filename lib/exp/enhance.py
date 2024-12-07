@@ -1,3 +1,4 @@
+import gc
 from typing import List, Dict, Any
 
 import numpy as np
@@ -72,6 +73,7 @@ def finetune(model, conf):
         finetune_set.append(image)
 
     model.train()
+    gc.collect()
 
     # 利用精选集构造 DataLoader，然后进行锁住除分类头的其他参数，进行微调
     finetune_set_loader, _ = VGDataLoader.splits(
