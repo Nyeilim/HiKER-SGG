@@ -7,11 +7,10 @@ sys.path.append("/output/HiKER-SGG/")
 
 # 如果把 sg_val/val_fn 放在后面就会导入报错，因为里面有个很重要的 setup 语句能导入 lib.fpn.box_intersections_cpu.bbox
 import config
-from lib.exp.val_fn import val_epoch
-from lib.exp.enhance import finetune
-from lib.exp.provider import provide_dataloader, provide_model
+from model.refactor.val_fn import val_epoch
+from model.refactor.provider import provide_dataloader, provide_model
 from config import ModelConfig, CONF_MAT_UPDATED, CONF_MAT_FREQ_TRAIN, data_path, print_globals
-from lib.exp.exp_util import load_best_matrices
+from model.refactor.util import load_best_matrices
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 exp_name = 'hikersgg_predcls_test'

@@ -9,12 +9,12 @@ from tqdm import tqdm
 sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
 
 import config
-from lib.exp.val_fn import val_epoch, confusion_matrix_evaluate
-from lib.exp.provider import provide_model, provide_dataloader
-from lib.exp.exp_util import save_best_matrices
-from lib.exp.optim_fn import get_optim
-from lib.exp.train_fn import train_epoch
-from lib.my_util import adj_normalize
+from model.refactor.val_fn import val_epoch, confusion_matrix_evaluate
+from model.refactor.provider import provide_model, provide_dataloader
+from model.refactor.util import save_best_matrices
+from model.refactor.optim_fn import get_optim
+from model.refactor.train_fn import train_epoch
+from model.util import adj_normalize
 from config import data_path, CONF_MAT_UPDATED, CONF_MAT_FREQ_TRAIN, ModelConfig, ALPHA, print_globals
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 选择显卡

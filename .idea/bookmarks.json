@@ -1,6 +1,18 @@
 {
   "HiKER-SGG": [
     {
+      "fileDescriptor": "$/model/dataloaders/visual_genome.py",
+      "linenumber": 484,
+      "name": "BPL: 加载数据集平衡",
+      "bookmarkType": "DIGIT_2"
+    },
+    {
+      "fileDescriptor": "$/model/surgery.py",
+      "linenumber": 56,
+      "name": "返回推理结果",
+      "bookmarkType": "LETTER_G"
+    },
+    {
       "fileDescriptor": "$/lib/my_ggnn_10.py",
       "linenumber": 280,
       "name": "BPL\u0026SA: 成员变量赋值给局部变量",

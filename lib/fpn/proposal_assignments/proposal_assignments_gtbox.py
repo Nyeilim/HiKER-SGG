@@ -1,7 +1,6 @@
-from lib.pytorch_misc import enumerate_by_image, gather_nd, random_choose
-from lib.fpn.box_utils import bbox_preds, center_size, bbox_overlaps
+from model.pytorch_misc import enumerate_by_image, random_choose
 import torch
-from lib.pytorch_misc import diagonal_inds, to_variable
+from model.pytorch_misc import diagonal_inds, to_variable
 from config import RELS_PER_IMG, REL_FG_FRACTION
 
 

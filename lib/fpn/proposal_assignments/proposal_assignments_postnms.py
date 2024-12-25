@@ -4,10 +4,9 @@
 
 
 import numpy as np
-import numpy.random as npr
 from .proposal_assignments_rel import _sel_rels
 from lib.fpn.box_utils import bbox_overlaps
-from lib.pytorch_misc import to_variable
+from model.pytorch_misc import to_variable
 import torch
 
 

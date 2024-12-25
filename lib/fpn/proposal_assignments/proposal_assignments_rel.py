@@ -8,8 +8,7 @@ import numpy.random as npr
 from config import BG_THRESH_HI, BG_THRESH_LO, FG_FRACTION_REL, ROIS_PER_IMG_REL, REL_FG_FRACTION, \
     RELS_PER_IMG
 from lib.fpn.box_utils import bbox_overlaps
-from lib.pytorch_misc import to_variable, nonintersecting_2d_inds
-from collections import defaultdict
+from model.pytorch_misc import to_variable
 import torch
 
 

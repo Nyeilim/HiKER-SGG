@@ -74,10 +74,10 @@ VG_SGG_DICT_FN = metadata_path('VG-SGG-dicts.json')
 PROPOSAL_FN = metadata_path('proposals.h5')
 
 ## 层次知识图文件
-ALL_EDGE = root_path(
+ALL_EDGE = data_path(
     'graphs/005/all_edges_with_sccluster2_pred_ent.pkl')  # 层次知识图中的各种边，ent2ent pred2pred ent2pred pred2ent
-NODE_EMBEDDING = root_path('graphs/001/emb_mtx_with_sccluster2_pred_ent.pkl')  # 各个 ent pred 节点的 embedding
-REL_COUNTS = root_path('graphs/001/pred_counts.pkl')  # 训练集中每个谓词的词频
+NODE_EMBEDDING = data_path('graphs/001/emb_mtx_with_sccluster2_pred_ent.pkl')  # 各个 ent pred 节点的 embedding
+REL_COUNTS = data_path('graphs/001/pred_counts.pkl')  # 训练集中每个谓词的词频
 
 ## 中间数据文件
 CONF_MAT_FREQ_TRAIN = data_path('misc/conf_mat_freq_train.npy')  # 初始的谓词混淆矩阵，来自 SGG-G2S 的工作，由 MotifNet 生成

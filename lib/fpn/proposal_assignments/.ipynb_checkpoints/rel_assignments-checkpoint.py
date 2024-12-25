@@ -5,10 +5,9 @@
 
 import numpy as np
 import numpy.random as npr
-from config import BG_THRESH_HI, BG_THRESH_LO, REL_FG_FRACTION, RELS_PER_IMG_REFINE
+from config import REL_FG_FRACTION
 from lib.fpn.box_utils import bbox_overlaps
-from lib.pytorch_misc import to_variable, nonintersecting_2d_inds
-from collections import defaultdict
+from model.pytorch_misc import to_variable
 import torch
 
 @to_variable
