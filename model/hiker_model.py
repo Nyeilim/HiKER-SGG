@@ -20,6 +20,8 @@ from model.object_detector import ObjectDetector, gather_res, load_vgg
 from model.pytorch_misc import onehot_logits, arange, enumerate_by_image, diagonal_inds, Flattener
 from model.resnet import resnet_l4
 from model.surgery import filter_dets
+from model.feature.drm import DRM
+from model.feature.dkt import DKT
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -212,6 +214,10 @@ class HiKER(Module):
 
         self.rel_class_weights = torch_tensor(self.rel_class_weights, requires_grad=False, device=CURRENT_DEVICE, dtype=torch_float32)
 
+        # 添加 DRM 和 DKT 模块
+        self.drm = DRM(hidden_dim=ggnn_rel_hidden_dim)
+        self.dkt = DKT(hidden_dim=ggnn_rel_hidden_dim, num_rel_classes=len(rel_classes))
+
         # self.with_clean_classifier = config.MODEL.ROI_RELATION_HEAD.WITH_CLEAN_CLASSIFIER
         # self.with_transfer = config.MODEL.ROI_RELATION_HEAD.WITH_TRANSFER_CLASSIFIER
         # self.sa = config.MODEL.ROI_RELATION_HEAD.SA
@@ -261,6 +267,15 @@ class HiKER(Module):
         result.obj_fmap = self.obj_feature_map(result.fmap.detach(), rois) # 这个过 ROI Align 的操作在 Detector 里面就有，这里用 detach 禁用反向传播重做遍，目的是什么？
         vr = self.visual_rep(result.fmap.detach(), rois, rel_inds[:, 1:]) # 谓词的视觉特征，后面将作为 SP 节点特征
 
+        # 在原有的特征提取之后，使用 DRM 增强特征
+        enhanced_features = self.drm(result.obj_fmap, vr, rel_inds)
+        
+        # 使用 DKT 进行知识迁移
+        dkt_output = self.dkt(enhanced_features, vr)  # 使用原始特征作为教师特征
+        
+        # 更新 vr 为增强后的特征
+        vr = dkt_output['fused_features']
+
         # 调用 GGNN 进行预测，通过实例名调用 Callable 方法，也就是 forward 方法
         (result.rm_obj_dists, result.obj_preds, result.rel_dists,
          result.scpred_softmax, result.scent_softmax) = self.ggnn_rel_reason(
@@ -274,6 +289,9 @@ class HiKER(Module):
         )
 
         if self.training:
+            # 添加知识蒸馏损失
+            kd_loss = self.dkt.compute_kd_loss(dkt_output['student_probs'], dkt_output['teacher_probs'])
+            losses['kd_loss'] = kd_loss
             return result
 
         twod_inds = arange(result.obj_preds.data) * self.num_classes + result.obj_preds.data
@@ -367,9 +385,57 @@ class HiKER(Module):
         else:
             return torch_zeros(1, requires_grad=False, device=CURRENT_DEVICE, dtype=torch_float32)
 
-    def rel_loss(self, result): # 这里做损失的 rel_dists 已经是经过 Softmax 后的，torch.sum(rel_dists[0]) == 1，所以直接过 Log 再过 NLL 就好
-        return F_nll_loss(torch_log(result.rel_dists + 1e-10), result.rel_labels[:, -1], weight=self.rel_class_weights) # rel_class_weights.shape(51,) 目前来看它是个全为 1 的权值列表，负责对谓词的重要程度进行加权
+    def rel_loss(self, result):
+        # 基础的关系分类损失
+        base_loss = F_nll_loss(torch_log(result.rel_dists + 1e-10), result.rel_labels[:, -1], weight=self.rel_class_weights)
+        
+        # 谓词级别的知识迁移损失
+        pred_kd_loss = self.dkt.compute_kd_loss(result.rel_dists, result.rel_dists.detach())  # 使用当前模型的输出作为教师信号
+        
+        # 三元组级别的知识迁移损失
+        # 获取主语和宾语的类别标签
+        subj_labels = result.rm_obj_labels[result.rel_labels[:, 1]]
+        obj_labels = result.rm_obj_labels[result.rel_labels[:, 2]]
+        
+        # 计算三元组相似度矩阵
+        triplet_sim = self.compute_triplet_similarity(
+            subj_labels, 
+            obj_labels, 
+            result.rel_labels[:, -1]
+        )
+        
+        # 计算三元组级别的知识迁移损失
+        triplet_kd_loss = -torch.mean(
+            torch.sum(triplet_sim * torch_log(result.rel_dists + 1e-10), dim=1)
+        )
+        
+        # 总损失
+        total_loss = base_loss + 0.1 * pred_kd_loss + 0.1 * triplet_kd_loss
+        
+        return total_loss
 
+    def compute_triplet_similarity(self, subj_labels, obj_labels, rel_labels):
+        """
+        计算三元组相似度
+        :param subj_labels: 主语标签
+        :param obj_labels: 宾语标签
+        :param rel_labels: 关系标签
+        :return: 相似度矩阵
+        """
+        batch_size = subj_labels.size(0)
+        
+        # 计算主语-宾语对的相似度
+        subj_sim = (subj_labels.unsqueeze(1) == subj_labels.unsqueeze(0)).float()
+        obj_sim = (obj_labels.unsqueeze(1) == obj_labels.unsqueeze(0)).float()
+        rel_sim = (rel_labels.unsqueeze(1) == rel_labels.unsqueeze(0)).float()
+        
+        # 组合相似度
+        triplet_sim = (subj_sim + obj_sim + rel_sim) / 3.0
+        
+        # 归一化
+        triplet_sim = F_softmax(triplet_sim / 0.1, dim=1)  # 温度参数设为 0.1
+        
+        return triplet_sim
 
     def scpred_loss(self, result):
         scpred_label = torch_zeros((result.scpred_softmax.shape[0]), requires_grad=False).type(torch_LongTensor).to(CURRENT_DEVICE)
