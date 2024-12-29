@@ -88,10 +88,11 @@ def _val_epoch(model, conf, dataset, dataloader, matrix_eval):
         mean_recall_mp = calculate_mr(evaluator_multiple_preds_list, conf.mode, multiple_preds=True)
         matrices = (recall, recall_mp, mean_recall, mean_recall_mp)
 
-        print('~~~~~~~~ Confusion Matrix in Val Epoch ~~~~~~~~')
-        print(confusion_matrix_int)
-        dump_file = data_path('confusion_matrix.npy')
-        np.save(dump_file, confusion_matrix_int)
+        if conf.test:
+            print('~~~~~~~~ Confusion Matrix in Val Epoch ~~~~~~~~')
+            print(confusion_matrix_int)
+            dump_file = data_path('confusion_matrix.npy')
+            np.save(dump_file, confusion_matrix_int)
 
     model.train()
     return matrices, confusion_matrix

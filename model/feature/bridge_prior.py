@@ -60,6 +60,11 @@ class ContextAwarePrior:
         self.obj_pred_dist = self.edge_matrix.sum(0)   # [151, 51]
         self.pred_marginal = self.edge_matrix.sum((0,1))  # [51]
         
+        # 确保概率分布有效
+        self.subj_pred_dist = F.normalize(self.subj_pred_dist + 1e-8, p=1, dim=1)
+        self.obj_pred_dist = F.normalize(self.obj_pred_dist + 1e-8, p=1, dim=1)
+        self.pred_marginal = F.normalize(self.pred_marginal + 1e-8, p=1, dim=0)
+        
     def get_context_aware_prior(self, rel_inds, obj_labels):
         """
         计算上下文感知的先验概率
@@ -94,6 +99,21 @@ class ContextAwarePrior:
                 # 否则使用分解的条件概率来缓解数据稀疏问题
                 prior = (self.subj_pred_dist[s] * self.obj_pred_dist[o]) / (self.pred_marginal + 1e-8)
             
-            priors.append(F.normalize(prior, p=1, dim=0))
+            # 确保概率有效
+            if torch.isnan(prior).any() or torch.isinf(prior).any():
+                print(f"Warning: Invalid prior detected for s={s}, o={o}")
+                prior = torch.zeros(51, device=obj_labels.device)
+                prior[0] = 1.0
+            else:
+                prior = F.normalize(prior, p=1, dim=0)
+            
+            priors.append(prior)
         
-        return torch.stack(priors) 
+        result = torch.stack(priors)
+        # 最后的安全检查
+        if torch.isnan(result).any() or torch.isinf(result).any():
+            print("Warning: Final priors contain invalid values")
+            result = torch.zeros_like(result)
+            result[:, 0] = 1.0
+            
+        return result 
