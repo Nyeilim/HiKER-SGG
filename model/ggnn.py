@@ -15,7 +15,7 @@ from lib.kern_old.lrga import LowRankAttention
 from model.util import MLP, adj_normalize
 from config import CONF_MAT_FREQ_TRAIN, MODEL, EDGE_MATRIX
 from model.feature.bridge_prior import ContextAwarePrior
-from model.feature.ha import HA
+from model.feature.ha import DoubleHA
 
 CUDA_DEVICE = torch.device(f'cuda:{current_device()}')
 
@@ -159,41 +159,6 @@ class GGNN(Module):
             self.fc_output_proj_img_ent = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
             self.fc_output_proj_ont_ent = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
 
-        self.debug_info = {}
-
-        if self.use_ontological_adjustment is True:
-            print('my_ggnn_10: using use_ontological_adjustment')
-            ontological_preds = self.adjmtx_pred2pred[3, :, :]
-            if self.fold_eoa is True:
-                diag_indices = np.diag_indices(ontological_preds.shape[0])
-                folded = ontological_preds + ontological_preds.T
-                folded[diag_indices] = ontological_preds[diag_indices]
-            if self.shift_eoa is True:
-                ontological_preds += 1.0
-                print(f'EOA-N: Used shift_eoa')
-            else:
-                print(f'EOA-N: Not using shift_eoa. self.eoa_n={self.normalize_eoa}')
-            if not self.normalize_eoa:
-                ontological_preds = ontological_preds / (ontological_preds.sum(-1)[:, None] + 1e-8)
-                print(f'EOA-N: Not using normalize_eoa. Using BPL\'s original normalization')
-            self.ontological_preds = torch.tensor(ontological_preds, dtype=torch.float32, device=CUDA_DEVICE)
-            if self.normalize_eoa is True:
-                fn.normalize(self.ontological_preds, out=self.ontological_preds)
-                print(f'EOA-N: Used normalize_eoa')
-        else:
-            print(f'my_ggnn_10: not using use_ontological_adjustment. self.use_ontological_adjustment={self.use_ontological_adjustment}')
-
-        # Init 阶段创建独属于 BPL 方法的 MLP 层以及加载混淆矩阵
-        # 如果使用 BPL 方法，就会使用在这里初始化的 fc_output_proj_img_pred_clean 作为分类头，而不是 fc_output_proj_img_pred
-        if self.with_clean_classifier:
-            self.fc_output_proj_img_pred_clean = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
-            self.fc_output_proj_ont_pred_clean = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
-
-            if self.refine_obj_cls:
-                self.fc_output_proj_img_ent_clean = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
-                self.fc_output_proj_ont_ent_clean = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
-
-            # 下面这段代码其实没啥用，你这个 self.pred_adj_nor 最后都没赋值给有效的局部变量，实际上混淆矩阵的预加载是在 hikersgg_predcls_train.py:55
             if self.with_transfer is True:
                 print("!!!!!!!!!With Confusion Matrix Channel!!!!!")
                 # 加载初始的谓词混淆矩阵
@@ -212,7 +177,7 @@ class GGNN(Module):
                 self.pred_adj_nor = torch.tensor(pred_adj_np, dtype=torch.float32, device=CUDA_DEVICE)  # 转换为张量
 
         # 新增 HA 层和上下文感知的桥边初始化器
-        self.ha = HA(hidden_dim=hidden_dim)
+        self.double_ha = DoubleHA(hidden_dim=hidden_dim)
         self.context_prior = None  # 延迟初始化，等待edge_matrix
 
     def forward(self, rel_inds, obj_probs, obj_fmaps, vr):
@@ -373,7 +338,7 @@ class GGNN(Module):
                     nodes_img_pred = self.gn[t](fn.relu(nodes_img_pred))
 
             # 消息传递循环结束后，使用 HA 层对齐向量空间
-            nodes_img_pred, nodes_ont_pred = self.ha(nodes_img_pred.unsqueeze(1), nodes_ont_pred.unsqueeze(1))
+            nodes_img_pred, nodes_ont_pred = self.double_ha(nodes_img_pred.unsqueeze(1), nodes_ont_pred.unsqueeze(1))
             nodes_img_pred = nodes_img_pred.squeeze(1)
             nodes_ont_pred = nodes_ont_pred.squeeze(1)
 
