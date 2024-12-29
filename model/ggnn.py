@@ -14,6 +14,8 @@ from model.refactor.hier import hierarchical_ent_reasoning, hierarchical_pred_re
 from lib.kern_old.lrga import LowRankAttention
 from model.util import MLP, adj_normalize
 from config import CONF_MAT_FREQ_TRAIN, MODEL, EDGE_MATRIX
+from model.feature.bridge_prior import ContextAwarePrior
+from model.feature.ha import HA
 
 CUDA_DEVICE = torch.device(f'cuda:{current_device()}')
 
@@ -209,6 +211,9 @@ class GGNN(Module):
                     print(f'No SA: Not using adj_normalize.self.sa={self.sa}')
                 self.pred_adj_nor = torch.tensor(pred_adj_np, dtype=torch.float32, device=CUDA_DEVICE)  # 转换为张量
 
+        # 新增 HA 层和上下文感知的桥边初始化器
+        self.ha = HA(hidden_dim=hidden_dim)
+        self.context_prior = None  # 延迟初始化，等待edge_matrix
 
     def forward(self, rel_inds, obj_probs, obj_fmaps, vr):
         """
@@ -256,15 +261,10 @@ class GGNN(Module):
         ## SP/CP 之间的桥边，SP/CP 的邻接矩阵未进行初始化；使用该矩阵，对于某个特定的 SP 节点，我们可以找到其 CP 节点
         edges_img2ont_pred = torch.zeros((num_img_pred, self.num_ont_pred), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
         if self.pred_bridge_edge_initial:
-            # 开启边初始化，需要根据边矩阵将 SP 按概率连接到 CP 节点
-            edge_matrix = np.load(EDGE_MATRIX)
-            all_rel_count = edge_matrix.sum(2) + 1e-8
-            edge_prob_matrix = edge_matrix.astype(float) / all_rel_count[:, :, None]
-
-            # 对于第 i 个 SP
-            for i in range(num_img_pred):
-                s,o = rel_inds[i][0], rel_inds[i][1]
-                edges_img2ont_pred[i, :51] = torch.from_numpy(edge_prob_matrix[s][o]).cuda()
+            if self.context_prior is None:
+                edge_matrix = np.load(EDGE_MATRIX)
+                self.context_prior = ContextAwarePrior(edge_matrix)
+            edges_img2ont_pred[:, :51] = self.context_prior.get_context_aware_prior(rel_inds, obj_probs.argmax(1), torch.zeros_like(rel_inds[:, 0]))
         edges_ont2img_pred = edges_img2ont_pred.t()
 
         # KG 图上的边，信息来自 all_edges_with_sccluster2_pred_ent.pkl；第一维代表着边类型 type，猜测和超类节点有关？
@@ -372,7 +372,12 @@ class GGNN(Module):
                     # No ReLU nor batchnorm for last layer
                     nodes_img_pred = self.gn[t](fn.relu(nodes_img_pred))
 
-            # 是否使用全新的 MLP 层作为最后的分类头，还是说使用来自 GB-Net 的分类头？
+            # 消息传递循环结束后，使用 HA 层对齐向量空间
+            nodes_img_pred, nodes_ont_pred = self.ha(nodes_img_pred.unsqueeze(1), nodes_ont_pred.unsqueeze(1))
+            nodes_img_pred = nodes_img_pred.squeeze(1)
+            nodes_ont_pred = nodes_ont_pred.squeeze(1)
+
+            # 是否使用全新的MLP层作为最后的分类头
             if with_clean_classifier:
                 nodes_img_pred_fc = self.fc_output_proj_img_pred_clean(nodes_img_pred)
                 nodes_ont_pred_fc = self.fc_output_proj_ont_pred_clean(nodes_ont_pred)
