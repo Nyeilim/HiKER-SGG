@@ -41,7 +41,7 @@ class UnionBoxesAndFeats(Module):
 
     def forward(self, fmap, rois, union_inds):
         union_pools = union_boxes(fmap, rois, union_inds, pooling_size=self.pooling_size, stride=self.stride)
-        if not self.use_feats: # True
+        if not self.use_feats:
             return union_pools.detach()
         # 提取 subject, object 对应的 gt_boxes，然后拼接起来，shape(num_all_rels, 8)
         pair_rois = torch.cat((rois[:, 1:][union_inds[:, 0]], rois[:, 1:][union_inds[:, 1]]),1).data.cpu().numpy()
