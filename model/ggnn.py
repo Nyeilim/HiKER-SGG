@@ -264,7 +264,7 @@ class GGNN(Module):
             if self.context_prior is None:
                 edge_matrix = np.load(EDGE_MATRIX)
                 self.context_prior = ContextAwarePrior(edge_matrix)
-            edges_img2ont_pred[:, :51] = self.context_prior.get_context_aware_prior(rel_inds, obj_probs.argmax(1), torch.zeros_like(rel_inds[:, 0]))
+            edges_img2ont_pred[:, :51] = self.context_prior.get_context_aware_prior(rel_inds, obj_probs.argmax(1))
         edges_ont2img_pred = edges_img2ont_pred.t()
 
         # KG 图上的边，信息来自 all_edges_with_sccluster2_pred_ent.pkl；第一维代表着边类型 type，猜测和超类节点有关？
