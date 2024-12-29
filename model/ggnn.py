@@ -159,6 +159,41 @@ class GGNN(Module):
             self.fc_output_proj_img_ent = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
             self.fc_output_proj_ont_ent = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
 
+        self.debug_info = {}
+
+        if self.use_ontological_adjustment is True:
+            print('my_ggnn_10: using use_ontological_adjustment')
+            ontological_preds = self.adjmtx_pred2pred[3, :, :]
+            if self.fold_eoa is True:
+                diag_indices = np.diag_indices(ontological_preds.shape[0])
+                folded = ontological_preds + ontological_preds.T
+                folded[diag_indices] = ontological_preds[diag_indices]
+            if self.shift_eoa is True:
+                ontological_preds += 1.0
+                print(f'EOA-N: Used shift_eoa')
+            else:
+                print(f'EOA-N: Not using shift_eoa. self.eoa_n={self.normalize_eoa}')
+            if not self.normalize_eoa:
+                ontological_preds = ontological_preds / (ontological_preds.sum(-1)[:, None] + 1e-8)
+                print(f'EOA-N: Not using normalize_eoa. Using BPL\'s original normalization')
+            self.ontological_preds = torch.tensor(ontological_preds, dtype=torch.float32, device=CUDA_DEVICE)
+            if self.normalize_eoa is True:
+                fn.normalize(self.ontological_preds, out=self.ontological_preds)
+                print(f'EOA-N: Used normalize_eoa')
+        else:
+            print(f'my_ggnn_10: not using use_ontological_adjustment. self.use_ontological_adjustment={self.use_ontological_adjustment}')
+
+        # Init 阶段创建独属于 BPL 方法的 MLP 层以及加载混淆矩阵
+        # 如果使用 BPL 方法，就会使用在这里初始化的 fc_output_proj_img_pred_clean 作为分类头，而不是 fc_output_proj_img_pred
+        if self.with_clean_classifier:
+            self.fc_output_proj_img_pred_clean = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
+            self.fc_output_proj_ont_pred_clean = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
+
+            if self.refine_obj_cls:
+                self.fc_output_proj_img_ent_clean = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
+                self.fc_output_proj_ont_ent_clean = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
+
+            # 下面这段代码其实没啥用，你这个 self.pred_adj_nor 最后都没赋值给有效的局部变量，实际上混淆矩阵的预加载是在 hikersgg_predcls_train.py:55
             if self.with_transfer is True:
                 print("!!!!!!!!!With Confusion Matrix Channel!!!!!")
                 # 加载初始的谓词混淆矩阵
