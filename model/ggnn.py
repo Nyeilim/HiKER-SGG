@@ -338,9 +338,9 @@ class GGNN(Module):
                     nodes_img_pred = self.gn[t](fn.relu(nodes_img_pred))
 
             # 消息传递循环结束后，使用 HA 层对齐向量空间
-            nodes_img_pred, nodes_ont_pred = self.double_ha(nodes_img_pred.unsqueeze(1), nodes_ont_pred.unsqueeze(1))
-            nodes_img_pred = nodes_img_pred.squeeze(1)
-            nodes_ont_pred = nodes_ont_pred.squeeze(1)
+            # nodes_img_pred, nodes_ont_pred = self.double_ha(nodes_img_pred.unsqueeze(1), nodes_ont_pred.unsqueeze(1))
+            # nodes_img_pred = nodes_img_pred.squeeze(1)
+            # nodes_ont_pred = nodes_ont_pred.squeeze(1)
 
             # 是否使用全新的MLP层作为最后的分类头
             if with_clean_classifier:
