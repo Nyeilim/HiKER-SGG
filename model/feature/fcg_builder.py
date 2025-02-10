@@ -37,94 +37,104 @@ class FCGBuilder:
         # 第二级:谓词模式节点,如<person,standing on,X>和<X,standing on,snow>
         self.level2_nodes = []  # 存储(s,p)或(p,o)二元组
         self.level2_feats = []  # 存储节点特征
+        self.level2_freq = []   # 存储节点频次（子节点频次之和）
         
         # 第一级:实体模式节点,如<person,X,X>和<X,X,snow>
         self.level1_nodes = []  # 存储s或o
         self.level1_feats = []  # 存储节点特征
+        self.level1_freq = []   # 存储节点频次（子节点频次之和）
         
-        # 1. 首先添加真实节点
+        # 1. 构建三级真实节点
         for s in range(151):
             for o in range(151):
-                # 添加一级节点(如果不存在)
-                if s not in self.level1_nodes:
-                    self.level1_nodes.append(s)
-                    self.level1_feats.append(torch.tensor(self.emb_ent[s]))
-                if o not in self.level1_nodes:
-                    self.level1_nodes.append(o)
-                    self.level1_feats.append(torch.tensor(self.emb_ent[o]))
-                
                 for p in range(51):
                     freq = self.edge_matrix[s,o,p]
                     if freq > 0:
-                        # 添加三级节点
-                        node_feat = torch.cat([
-                            torch.tensor(self.emb_ent[s]),
-                            torch.tensor(self.emb_pred[p]), 
-                            torch.tensor(self.emb_ent[o])
-                        ])
-                        self.level3_nodes.append((s,p,o))
-                        self.level3_feats.append(node_feat)
-                        self.level3_virtual.append(False)
-                        self.level3_freq.append(freq)
-                        
-                        # 添加二级节点
-                        if (s,p) not in self.level2_nodes:
-                            self.level2_nodes.append((s,p))
-                        if (p,o) not in self.level2_nodes:
-                            self.level2_nodes.append((p,o))
-
-        # 2. 构建虚节点
-        for s in range(151):
-            for o in range(151):
-                if not any(self.edge_matrix[s,o,:] > 0):
-                    # 寻找桥接谓词
-                    bridge_preds = set()
-                    for x in range(151):
-                        for p in range(51):
-                            if (self.edge_matrix[s,x,p] > 0 and 
-                                self.edge_matrix[x,o,p] > 0):
-                                bridge_preds.add(p)
-                    
-                    # 为每个桥接谓词创建虚节点            
-                    for p in bridge_preds:
+                        # 拼接词嵌入向量并通过FC层
                         node_feat = torch.cat([
                             torch.tensor(self.emb_ent[s]),
                             torch.tensor(self.emb_pred[p]),
                             torch.tensor(self.emb_ent[o])
                         ])
+                        node_feat = self.emb_fc(node_feat)
+                        
                         self.level3_nodes.append((s,p,o))
                         self.level3_feats.append(node_feat)
-                        self.level3_virtual.append(True)
-                        self.level3_freq.append(0)
+                        self.level3_virtual.append(False)
+                        self.level3_freq.append(freq)
                         
-                        # 虚节点也要添加对应的二级节点
+                        # 记录二级节点
                         if (s,p) not in self.level2_nodes:
                             self.level2_nodes.append((s,p))
                         if (p,o) not in self.level2_nodes:
                             self.level2_nodes.append((p,o))
                             
+        # 2. 构建二级节点特征(子类三级节点平均)和词频(子节点词频之和)
+        for node in self.level2_nodes:
+            child_feats = []
+            freq_sum = 0
+            for i, triple in enumerate(self.level3_nodes):
+                # 同时匹配(s,p)和(p,o)两种形式的二级节点
+                if (node == triple[:2] or node == triple[1:]) and not self.level3_virtual[i]:
+                    child_feats.append(self.level3_feats[i])
+                    freq_sum += self.level3_freq[i]
+            self.level2_feats.append(torch.stack(child_feats).mean(0))
+            self.level2_freq.append(freq_sum)
+            
+        # 3. 构建一级节点及特征(子类二级节点平均)和词频(子节点词频之和)
+        # 构建主语模式的一级节点 <s,X,X>
+        for s in range(151):
+            child_feats = []
+            freq_sum = 0
+            for i, (s2,p) in enumerate(self.level2_nodes):
+                if s == s2:
+                    child_feats.append(self.level2_feats[i])
+                    freq_sum += self.level2_freq[i]
+            if child_feats:
+                self.level1_nodes.append(s)
+                self.level1_feats.append(torch.stack(child_feats).mean(0))
+                self.level1_freq.append(freq_sum)
+                
+        # 构建宾语模式的一级节点 <X,X,o> 
+        for o in range(151):
+            child_feats = []
+            freq_sum = 0
+            for i, (p,o2) in enumerate(self.level2_nodes):
+                if o == o2:
+                    child_feats.append(self.level2_feats[i])
+                    freq_sum += self.level2_freq[i]
+            if child_feats:
+                self.level1_nodes.append(o)
+                self.level1_feats.append(torch.stack(child_feats).mean(0))
+                self.level1_freq.append(freq_sum)
+
+        # 4. 构建虚节点
+        # 遍历所有二级节点对，寻找可连接的路径
+        self.level3_real_nodes_set = set(self.level3_nodes)
+        for i, node_a in enumerate(self.level2_nodes):
+            for j, node_b in enumerate(self.level2_nodes):
+                # A的谓词等于B的谓词，并且该三元组并不是真实三级节点
+                if node_a[1] == node_b[0] and (node_a[0], node_a[1], node_b[1]) not in self.level3_real_nodes_set:
+                    s, p, o = node_a[0], node_a[1], node_b[1]
+                    related_l2_feats = [self.level2_feats[i], self.level2_feats[j]] # 直接使用已知的相关二级节点的平均特征计算虚节点特征
+                    node_feat = torch.stack(related_l2_feats).mean(0)
+                    
+                    # 添加虚节点
+                    self.level3_nodes.append((s,p,o))
+                    self.level3_feats.append(node_feat)
+                    self.level3_virtual.append(True)
+                    self.level3_freq.append(0)  # 虚节点样本数量为0
+                            
         # 转换为tensor
-        self.level3_feats = torch.stack(self.level3_feats)
         self.level3_virtual = torch.tensor(self.level3_virtual, dtype=torch.bool)
         self.level3_freq = torch.tensor(self.level3_freq)
-        self.level1_feats = torch.stack(self.level1_feats)
-        
-        # 计算二级节点特征(子节点平均)
-        self.level2_feats = []
-        for s,p in self.level2_nodes:
-            child_feats = []
-            for i, (s2,p2,o2) in enumerate(self.level3_nodes):
-                if s==s2 and p==p2 and not self.level3_virtual[i]:
-                    child_feats.append(self.level3_feats[i])
-            if child_feats:
-                self.level2_feats.append(torch.stack(child_feats).mean(0))
-            else:
-                virtual_feats = []
-                for i, (s2,p2,o2) in enumerate(self.level3_nodes):
-                    if s==s2 and p==p2:
-                        virtual_feats.append(self.level3_feats[i])
-                self.level2_feats.append(torch.stack(virtual_feats).mean(0))
+        self.level3_feats = torch.stack(self.level3_feats)
         self.level2_feats = torch.stack(self.level2_feats)
+        self.level2_freq = torch.tensor(self.level2_freq)
+        self.level1_feats = torch.stack(self.level1_feats)
+        self.level1_freq = torch.tensor(self.level1_freq)
+
+
 
     def build_edges(self):
         """构建层级之间的边连接"""
