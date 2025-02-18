@@ -208,8 +208,10 @@ class FCGBuilder:
             return self.level1_o_subnodes.get(node.obj, [])
         elif node.level == 2 and node.sub is not None:
             return self.level2_sp_subnodes.get((node.sub, node.pred), [])
-        else:
+        elif node.level == 2 and node.obj is not None:
             return self.level2_po_subnodes.get((node.pred, node.obj), [])
+        else:
+            raise ValueError(f"This don't have subnodes: {node}")
         
     def dump_nodes(self):
         """保存FCG的节点和边信息到文件"""
@@ -252,7 +254,7 @@ class FCGBuilder:
             
         with open(data_path('fcg_metadata.json'), 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
-        
+
+# 该文件作为模块导入时，下面这行代码不会被执行
 if __name__ == '__main__':
     fcg_builder = FCGBuilder(hidden_dim=1024)
-    fcg_builder.dump_nodes()

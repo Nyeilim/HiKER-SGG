@@ -16,20 +16,34 @@
 # 代码实现步骤
 统一规则，均采用中文注释，新创建的文件均放在 /model/feature 包下。建议将构建和前向传播分别放到新建的 fcg_builder.py 文件和 fcg_net.py 文件中。
 
-FCG Net 的输入参数参见 @ggnn.py 中的 forward 方法的 rel_inds, obj_probs, vr 参数，它们都是属于同一张样本的数据。返回值参见 @ggnn.py 中的 forward 方法的 pred_cls_score, scpred_cls_score 参数。
-
-## 节点构建与边连接
+## FCG_Builder
+### 节点构建与边连接
 读取 @config.py 的 EDGE_MATRIX 文件，里面以 151x151x51 的张量记录着训练集中所有关系的统计先验；读取 @config.py 的 NODE_EMBEDDING 文件，里面记录着实体(entity)标签与谓词(predicate)标签的词嵌入向量。
 
 先构建三级节点，三级节点的初始化特征由 <s,p,o> 的词嵌入向量 concat 后过 emb_fc 得到。然后构建二级节点，其初始化特征为子类三级节点的平均。然后构建一级节点，其初始化特征为子类二级节点的平均。最后构建虚节点【虚节点在层级上与三级节点并列】，其初始化特征为二级节点的平均。
 
 构建节点时，将节点索引号，`<s,p,o>` 对应的实际含义比如 `<person, standing on, snow>`，样本数量【虚节点样本数量为 0，一二级节点样本数量为其下属三级节点样本数量的和，三级节点的样本数量等于训练集中该三元组的标注数量】，等信息全部写到 Json 文件中，便于后面的查阅和检查。
 
-## 信息传递
-仿照 @ggnn.py 中的流程进行基于 GRU 规则的信息传递，传递次数为三次。每次信息传递仅更新节点的特征表示，而不更新边连接权重。不进行三级节点的初始连接，仅初始连接一级节点，因为如果分别在一级和三级节点对三元组进行连接，会导致在信息传递时，第二级的节点会接收到两次特征信息，有冗余可能不好。
+## FCG_Net
+### 前向传播参数
+输入参数：输入参数均为来自同一张图片中的样本，
+    - rel_inds：shape(img_all_rels,2) 候选的 <s,o> 二元组
+    - obj_probs：shape(img_gt_boxes,151) Boxes 的特征图
+    - vr：shape(img_all_rels,1024) 关系的视觉特征
+返回值：
+    - pred_cls_score：谓词的预测概率 
+    - scpred_cls_score：超类谓词的预测概率
 
-## 层级分类
+FCG Net 的输入参数参见 @ggnn.py 中的 forward 方法的 rel_inds, obj_probs, vr 参数，它们都是属于同一张样本的数据。
+返回值参见 @ggnn.py 中的 forward 方法的 pred_cls_score, scpred_cls_score 参数。
+### 导入 FCG
+从外部导入 FCG 图的数据，包括节点特征，和边连接权重。   
+
+### 信息传递
+如同 @ggnn.py 那样，先计算接收到的信息，然后仿照 @ggnn.py 中的流程进行基于 GRU 规则的特征更新，传递次数为三次。每次更新仅更新节点的特征表示，而不更新边连接权重。不进行三级节点的初始连接，仅初始连接一级节点，因为如果分别在一级和三级节点对三元组进行连接，会导致在信息传递时，第二级的节点会接收到两次特征信息，有冗余可能不好。
+
+### 层级分类
 仿照 @hier.py 中的 hierarchical_pred_reasoning 方法来进行层级分类
 
-## 损失与反向传播
+### 损失与反向传播
 损失函数的设计参考 @hiker_model.py 中的 rel_loss 方法
