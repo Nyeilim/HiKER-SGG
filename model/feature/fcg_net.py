@@ -3,11 +3,8 @@ import torch
 from torch.cuda import current_device
 from torch.nn import Module, Linear
 import torch.nn.functional as fn
-from pickle import load as pickle_load
 
-from model.refactor.hier import hierarchical_pred_reasoning
 from model.util import MLP
-from config import FCG_NODES, FCG_EDGES
 from model.feature.fcg_builder import FCGBuilder
 CUDA_DEVICE = torch.device(f'cuda:{current_device()}')
 
@@ -30,43 +27,176 @@ class FCGNet(Module):
         self.fcg = FCGBuilder(hidden_dim=hidden_dim)
 
         # 初始化消息传递所需的 MLP 层
-        self.fc_mp_send = MLP([hidden_dim, hidden_dim // 2, hidden_dim // 4], act_fn='ReLU', last_act=True)
-        self.fc_mp_receive = MLP([3 * hidden_dim // 4, 3 * hidden_dim // 4, hidden_dim], act_fn='ReLU', last_act=True)
+        self.fc_send_l1_nodes = MLP([hidden_dim, hidden_dim // 2, hidden_dim // 4], act_fn='ReLU', last_act=True)
+        self.fc_send_l2_nodes = MLP([hidden_dim, hidden_dim // 2, hidden_dim // 4], act_fn='ReLU', last_act=True)
+        self.fc_send_l3_nodes = MLP([hidden_dim, hidden_dim // 2, hidden_dim // 4], act_fn='ReLU', last_act=True)
+        self.fc_send_triplet = MLP([hidden_dim, hidden_dim // 2, hidden_dim // 4], act_fn='ReLU', last_act=True)
+        self.fc_rcv_l1_nodes = MLP([2 * hidden_dim // 4, 2 * hidden_dim // 4, hidden_dim], act_fn='ReLU', last_act=True)
+        self.fc_rcv_l2_nodes = MLP([2 * hidden_dim // 4, 2 * hidden_dim // 4, hidden_dim], act_fn='ReLU', last_act=True)
+        self.fc_rcv_l3_nodes = MLP([hidden_dim // 4, hidden_dim // 2, hidden_dim], act_fn='ReLU', last_act=True)
+        self.fc_rcv_triplet = MLP([hidden_dim // 4, hidden_dim // 2, hidden_dim], act_fn='ReLU', last_act=True)
 
-        # 初始化 GRU 规则所需的线性层
-        self.fc_eq3_w = Linear(hidden_dim, hidden_dim)
-        self.fc_eq3_u = Linear(hidden_dim, hidden_dim)
-        self.fc_eq4_w = Linear(hidden_dim, hidden_dim)
-        self.fc_eq4_u = Linear(hidden_dim, hidden_dim)
-        self.fc_eq5_w = Linear(hidden_dim, hidden_dim)
-        self.fc_eq5_u = Linear(hidden_dim, hidden_dim)
+        # 初始化 GRU 规则所需的线性层，eq3/4/5 代表 GRU 论文中的三条核心等式，w/u 作用于输入/隐状态的权重
+        ## l1
+        self.fc_eq3_w_l1 = Linear(hidden_dim, hidden_dim)
+        self.fc_eq3_u_l1 = Linear(hidden_dim, hidden_dim)
+        self.fc_eq4_w_l1 = Linear(hidden_dim, hidden_dim)
+        self.fc_eq4_u_l1 = Linear(hidden_dim, hidden_dim)
+        self.fc_eq5_w_l1 = Linear(hidden_dim, hidden_dim)
+        self.fc_eq5_u_l1 = Linear(hidden_dim, hidden_dim)
+        ## l2_nodes
+        self.fc_eq3_w_l2 = Linear(hidden_dim, hidden_dim)
+        self.fc_eq3_u_l2 = Linear(hidden_dim, hidden_dim)
+        self.fc_eq4_w_l2 = Linear(hidden_dim, hidden_dim)
+        self.fc_eq4_u_l2 = Linear(hidden_dim, hidden_dim)
+        self.fc_eq5_w_l2 = Linear(hidden_dim, hidden_dim)
+        self.fc_eq5_u_l2 = Linear(hidden_dim, hidden_dim)
+        ## l3_nodes
+        self.fc_eq3_w_l3 = Linear(hidden_dim, hidden_dim)
+        self.fc_eq3_u_l3 = Linear(hidden_dim, hidden_dim)
+        self.fc_eq4_w_l3 = Linear(hidden_dim, hidden_dim)
+        self.fc_eq4_u_l3 = Linear(hidden_dim, hidden_dim)
+        self.fc_eq5_w_l3 = Linear(hidden_dim, hidden_dim)
+        self.fc_eq5_u_l3 = Linear(hidden_dim, hidden_dim)
+        ## triplet
+        self.fc_eq3_w_tri = Linear(hidden_dim, hidden_dim)
+        self.fc_eq3_u_tri = Linear(hidden_dim, hidden_dim)
+        self.fc_eq4_w_tri = Linear(hidden_dim, hidden_dim)
+        self.fc_eq4_u_tri = Linear(hidden_dim, hidden_dim)
+        self.fc_eq5_w_tri = Linear(hidden_dim, hidden_dim)
+        self.fc_eq5_u_tri = Linear(hidden_dim, hidden_dim)
 
         # 初始化输出投影层
         self.fc_output_proj = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
 
-    def forward(self, rel_inds, obj_probs, obj_fmaps, vr):
+    def forward(self, rel_inds, ent_probs, obj_fmaps, vr):
         """
         FCG Net 的前向传播
         :param rel_inds: shape(img_all_rels,2) <s,o> 二元组
-        :param obj_probs: shape(img_gt_boxes,151) boxes 的类别概率分布
+        :param ent_probs: shape(img_gt_boxes,151) boxes 的类别概率分布
         :param obj_fmaps: shape(img_gt_boxes,1024) boxes 的特征图
         :param vr: shape(img_all_rels,1024) 关系的视觉特征
         :return: pred_cls_score: 谓词的预测概率
                 scpred_cls_score: 超类谓词的预测概率
         """
-        num_img_gt_boxes = obj_probs.size(0)  # 图片中的实体数量
+        num_img_gt_boxes = ent_probs.size(0)  # 图片中的实体数量
         num_img_all_rels = rel_inds.size(0)  # 图片中的关系数量
+        triplet = vr.clone() # 使用关系视觉特征作为三元组特征
 
         # 复制 FCG 节点特征
-        fcg_l1_nodes = self.fcg.l1_nodes
-        fcg_l2_nodes = self.fcg.l2_nodes
-        fcg_l3_nodes = self.fcg.l3_nodes
+        fcg_l1_feats = torch.stack([node.feat for node in self.fcg.l1_nodes]).to(CUDA_DEVICE)
+        fcg_l2_feats = torch.stack([node.feat for node in self.fcg.l2_nodes]).to(CUDA_DEVICE)
+        fcg_l3_feats = torch.stack([node.feat for node in self.fcg.l3_nodes]).to(CUDA_DEVICE)
 
         # 复制 FCG 边权重
-        fcg_edges_l2_l3 = self.fcg.edges_l2_l3
-        fcg_edges_l1_l2 = self.fcg.edges_l1_l2  
+        fcg_edges_l2_l3 = self.fcg.edges_l2_l3.to(CUDA_DEVICE)
+        fcg_edges_l1_l2 = self.fcg.edges_l1_l2.to(CUDA_DEVICE)
+        fcg_edges_l3_l2 = fcg_edges_l2_l3.t()
+        fcg_edges_l2_l1 = fcg_edges_l1_l2.t()
         
-        # 使用 VR 特征来作为三元组节点的特征，与 FCG 图一级节点建立桥边
-        bridge_edges = torch.zeros((num_img_all_rels, len(fcg_l1_nodes)), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
+        # 数据集中 idx 映射到数组中 idx
+        fcg_l1_nodes = self.fcg.l1_nodes
+        l1_nodes_sub_idx_map = {}
+        l1_nodes_obj_idx_map = {}
+        for i,node in enumerate(fcg_l1_nodes):
+            if node.sub is not None: # <sub,x,x>
+                l1_nodes_sub_idx_map[node.sub] = i
+            if node.obj is not None: # <x,x,obj>
+                l1_nodes_obj_idx_map[node.obj] = i
+        sub_mask = torch.zeros((151,))
+        sub_mask[list(l1_nodes_sub_idx_map.keys)] = 1
+        obj_mask = torch.zeros((151,))
+        obj_mask[list(l1_nodes_obj_idx_map.keys)] = 1
 
-        return pred_cls_score, scpred_cls_score 
+        # 使用 VR 特征来作为三元组节点的特征，与 FCG 图一级节点建立桥边
+        bridge_edges_tri_l1 = torch.zeros((num_img_all_rels, len(fcg_l1_nodes)), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
+        
+        # 1. 根据 rel_inds 找到关系对应的 gt_boxes
+        sub_boxes = rel_inds[:,0]  # 主语对应的 box 索引
+        obj_boxes = rel_inds[:,1]  # 宾语对应的 box 索引
+        
+        # 2. 获取 boxes 对应的实体类别概率分布
+        sub_probs = ent_probs[sub_boxes]  # (num_rels, 151) 主语的类别概率
+        obj_probs = ent_probs[obj_boxes]  # (num_rels, 151) 宾语的类别概率
+        
+        # 3. 剔除不在 l1_nodes 中的实体概率并归一化
+        sub_probs = sub_probs * sub_mask.to(CUDA_DEVICE)
+        obj_probs = obj_probs * obj_mask.to(CUDA_DEVICE)
+        
+        # 归一化概率
+        sub_probs = fn.normalize(sub_probs, p=1, dim=1)
+        obj_probs = fn.normalize(obj_probs, p=1, dim=1)
+        
+        # 4. 建立桥边
+        # 对于每个关系,将主语概率分配给对应的主语模式一级节点
+        for i in range(num_img_all_rels):
+            for ent_idx, prob in enumerate(sub_probs[i]):
+                if prob > 0 and ent_idx in l1_nodes_sub_idx_map:
+                    bridge_edges_tri_l1[i][l1_nodes_sub_idx_map[ent_idx]] = prob
+                    
+            # 将宾语概率分配给对应的宾语模式一级节点
+            for ent_idx, prob in enumerate(obj_probs[i]):
+                if prob > 0 and ent_idx in l1_nodes_obj_idx_map:
+                    bridge_edges_tri_l1[i][l1_nodes_obj_idx_map[ent_idx]] = prob
+                    
+        # 归一化桥边权重,使每个关系的总权重为1
+        bridge_edges_tri_l1 = fn.normalize(bridge_edges_tri_l1, p=1, dim=1)
+        bridge_edges_l1_tri = bridge_edges_tri_l1.t()
+
+        for t in range(self.time_step_num):
+            # 发出消息
+            msg_send_l1_nodes = self.fc_send_l1_nodes(fcg_l1_feats)
+            msg_send_l2_nodes = self.fc_send_l2_nodes(fcg_l2_feats)
+            msg_send_l3_nodes = self.fc_send_l3_nodes(fcg_l3_feats)
+            msg_send_triplet = self.fc_send_triplet(triplet)
+
+            # 接收消息
+            msg_rcv_l1_nodes = self.fc_rcv_l1_nodes(torch.cat([
+                torch.mm(fcg_edges_l1_l2, msg_send_l2_nodes),
+                torch.mm(bridge_edges_l1_tri, msg_send_triplet),
+            ], dim=1))
+            msg_rcv_l2_nodes = self.fc_rcv_l2_nodes(torch.cat([
+                torch.mm(fcg_edges_l2_l3, msg_send_l3_nodes),
+                torch.mm(fcg_edges_l2_l1, msg_send_l1_nodes),
+            ], dim=1))
+            msg_rcv_l3_nodes = self.fc_rcv_l3_nodes(torch.cat([
+                torch.mm(fcg_edges_l3_l2, msg_send_l2_nodes),
+            ], dim=1))  
+            msg_rcv_triplet = self.fc_rcv_triplet(torch.cat([
+                torch.mm(bridge_edges_l1_tri, msg_send_l1_nodes),
+            ], dim=1))
+
+            # 释放引用
+            del msg_send_l1_nodes, msg_send_l2_nodes, msg_send_l3_nodes, msg_send_triplet
+
+            # 更新节点特征
+            z_l1 = torch.sigmoid(self.fc_eq3_w_l1(msg_rcv_l1_nodes) + self.fc_eq3_u_l1(fcg_l1_feats))
+            r_l1 = torch.sigmoid(self.fc_eq4_w_l1(msg_rcv_l1_nodes) + self.fc_eq4_u_l1(fcg_l1_feats))
+            h_l1 = torch.tanh(self.fc_eq5_w_l1(msg_rcv_l1_nodes) + self.fc_eq5_u_l1(r_l1 * fcg_l1_feats))
+            fcg_l1_feats = (1 - z_l1) * fcg_l1_feats + z_l1 * h_l1
+            del msg_rcv_l1_nodes, r_l1, z_l1, h_l1
+
+            z_l2 = torch.sigmoid(self.fc_eq3_w_l2(msg_rcv_l2_nodes) + self.fc_eq3_u_l2(fcg_l2_feats))
+            r_l2 = torch.sigmoid(self.fc_eq4_w_l2(msg_rcv_l2_nodes) + self.fc_eq4_u_l2(fcg_l2_feats))
+            h_l2 = torch.tanh(self.fc_eq5_w_l2(msg_rcv_l2_nodes) + self.fc_eq5_u_l2(r_l2 * fcg_l2_feats))
+            fcg_l2_feats = (1 - z_l2) * fcg_l2_feats + z_l2 * h_l2
+            del msg_rcv_l2_nodes, r_l2, z_l2, h_l2
+            
+            z_l3 = torch.sigmoid(self.fc_eq3_w_l3(msg_rcv_l3_nodes) + self.fc_eq3_u_l3(fcg_l3_feats))
+            r_l3 = torch.sigmoid(self.fc_eq4_w_l3(msg_rcv_l3_nodes) + self.fc_eq4_u_l3(fcg_l3_feats))
+            h_l3 = torch.tanh(self.fc_eq5_w_l3(msg_rcv_l3_nodes) + self.fc_eq5_u_l3(r_l3 * fcg_l3_feats))
+            fcg_l3_feats = (1 - z_l3) * fcg_l3_feats + z_l3 * h_l3
+            del msg_rcv_l3_nodes, r_l3, z_l3, h_l3
+            
+            z_tri = torch.sigmoid(self.fc_eq3_w_tri(msg_rcv_triplet) + self.fc_eq3_u_tri(triplet))
+            r_tri = torch.sigmoid(self.fc_eq4_w_tri(msg_rcv_triplet) + self.fc_eq4_u_tri(triplet))
+            h_tri = torch.tanh(self.fc_eq5_w_tri(msg_rcv_triplet) + self.fc_eq5_u_tri(r_tri * triplet))
+            triplet = (1 - z_tri) * triplet + z_tri * h_tri
+            del msg_rcv_triplet, r_tri, z_tri, h_tri
+
+
+
+
+
+
+        return pred_cls_score, scpred_cls_score
