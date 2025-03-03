@@ -8,12 +8,6 @@ from model.util import MLP
 from model.feature.fcg_builder import FCGBuilder
 CUDA_DEVICE = torch.device(f'cuda:{current_device()}')
 
-def wrap(nparr):
-    return torch.tensor(nparr, dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
-
-def arange(num):
-    return torch.arange(num, dtype=torch.int64, device=CUDA_DEVICE)
-
 class FCGNet(Module):
     """
     基于细粒度知识图(FCG)的场景图生成网络
@@ -27,14 +21,14 @@ class FCGNet(Module):
         self.fcg = FCGBuilder(hidden_dim=hidden_dim)
 
         # 初始化消息传递所需的 MLP 层
-        self.fc_send_l1_nodes = MLP([hidden_dim, hidden_dim // 2, hidden_dim // 4], act_fn='ReLU', last_act=True)
-        self.fc_send_l2_nodes = MLP([hidden_dim, hidden_dim // 2, hidden_dim // 4], act_fn='ReLU', last_act=True)
-        self.fc_send_l3_nodes = MLP([hidden_dim, hidden_dim // 2, hidden_dim // 4], act_fn='ReLU', last_act=True)
-        self.fc_send_triplet = MLP([hidden_dim, hidden_dim // 2, hidden_dim // 4], act_fn='ReLU', last_act=True)
-        self.fc_rcv_l1_nodes = MLP([2 * hidden_dim // 4, 2 * hidden_dim // 4, hidden_dim], act_fn='ReLU', last_act=True)
-        self.fc_rcv_l2_nodes = MLP([2 * hidden_dim // 4, 2 * hidden_dim // 4, hidden_dim], act_fn='ReLU', last_act=True)
-        self.fc_rcv_l3_nodes = MLP([hidden_dim // 4, hidden_dim // 2, hidden_dim], act_fn='ReLU', last_act=True)
-        self.fc_rcv_triplet = MLP([hidden_dim // 4, hidden_dim // 2, hidden_dim], act_fn='ReLU', last_act=True)
+        self.mlp_send_l1_nodes = MLP([hidden_dim, hidden_dim // 2, hidden_dim // 4], act_fn='ReLU', last_act=True)
+        self.mlp_send_l2_nodes = MLP([hidden_dim, hidden_dim // 2, hidden_dim // 4], act_fn='ReLU', last_act=True)
+        self.mlp_send_l3_nodes = MLP([hidden_dim, hidden_dim // 2, hidden_dim // 4], act_fn='ReLU', last_act=True)
+        self.mlp_send_triplet = MLP([hidden_dim, hidden_dim // 2, hidden_dim // 4], act_fn='ReLU', last_act=True)
+        self.mlp_rcv_l1_nodes = MLP([2 * hidden_dim // 4, 2 * hidden_dim // 4, hidden_dim], act_fn='ReLU', last_act=True)
+        self.mlp_rcv_l2_nodes = MLP([2 * hidden_dim // 4, 2 * hidden_dim // 4, hidden_dim], act_fn='ReLU', last_act=True)
+        self.mlp_rcv_l3_nodes = MLP([hidden_dim // 4, hidden_dim // 2, hidden_dim], act_fn='ReLU', last_act=True)
+        self.mlp_rcv_triplet = MLP([hidden_dim // 4, hidden_dim // 2, hidden_dim], act_fn='ReLU', last_act=True)
 
         # 初始化 GRU 规则所需的线性层，eq3/4/5 代表 GRU 论文中的三条核心等式，w/u 作用于输入/隐状态的权重
         ## l1
@@ -67,7 +61,8 @@ class FCGNet(Module):
         self.fc_eq5_u_tri = Linear(hidden_dim, hidden_dim)
 
         # 初始化输出投影层
-        self.fc_output_proj = MLP([hidden_dim, hidden_dim, hidden_dim], act_fn='ReLU', last_act=False)
+        self.fc_triplet_logits = Linear(hidden_dim, hidden_dim)
+        self.fc_fcg_logits = Linear(hidden_dim, hidden_dim)
 
     def forward(self, rel_inds, ent_probs, obj_fmaps, vr):
         """
@@ -124,6 +119,7 @@ class FCGNet(Module):
         obj_probs = obj_probs * obj_mask.to(CUDA_DEVICE)
         
         # 归一化概率
+        # TODO：这里归一化出错怎么办？因为有大量无效数据，他们可能根本没有在训练集中出现
         sub_probs = fn.normalize(sub_probs, p=1, dim=1)
         obj_probs = fn.normalize(obj_probs, p=1, dim=1)
         
@@ -139,30 +135,31 @@ class FCGNet(Module):
                 if prob > 0 and ent_idx in l1_nodes_obj_idx_map:
                     bridge_edges_tri_l1[i][l1_nodes_obj_idx_map[ent_idx]] = prob
                     
-        # 归一化桥边权重,使每个关系的总权重为1
+        # 归一化桥边权重，使每个关系的总权重为 1；这边的主宾语权重融合可以做考虑，现在是 1/2 的情况
+        # 可以考虑看分布的最大概率，如果主语的最大概率高于宾语，那么预测分支应该更加偏向于主语分支
         bridge_edges_tri_l1 = fn.normalize(bridge_edges_tri_l1, p=1, dim=1)
         bridge_edges_l1_tri = bridge_edges_tri_l1.t()
 
         for t in range(self.time_step_num):
             # 发出消息
-            msg_send_l1_nodes = self.fc_send_l1_nodes(fcg_l1_feats)
-            msg_send_l2_nodes = self.fc_send_l2_nodes(fcg_l2_feats)
-            msg_send_l3_nodes = self.fc_send_l3_nodes(fcg_l3_feats)
-            msg_send_triplet = self.fc_send_triplet(triplet)
+            msg_send_l1_nodes = self.mlp_send_l1_nodes(fcg_l1_feats)
+            msg_send_l2_nodes = self.mlp_send_l2_nodes(fcg_l2_feats)
+            msg_send_l3_nodes = self.mlp_send_l3_nodes(fcg_l3_feats)
+            msg_send_triplet = self.mlp_send_triplet(triplet)
 
             # 接收消息
-            msg_rcv_l1_nodes = self.fc_rcv_l1_nodes(torch.cat([
+            msg_rcv_l1_nodes = self.mlp_rcv_l1_nodes(torch.cat([
                 torch.mm(fcg_edges_l1_l2, msg_send_l2_nodes),
                 torch.mm(bridge_edges_l1_tri, msg_send_triplet),
             ], dim=1))
-            msg_rcv_l2_nodes = self.fc_rcv_l2_nodes(torch.cat([
+            msg_rcv_l2_nodes = self.mlp_rcv_l2_nodes(torch.cat([
                 torch.mm(fcg_edges_l2_l3, msg_send_l3_nodes),
                 torch.mm(fcg_edges_l2_l1, msg_send_l1_nodes),
             ], dim=1))
-            msg_rcv_l3_nodes = self.fc_rcv_l3_nodes(torch.cat([
+            msg_rcv_l3_nodes = self.mlp_rcv_l3_nodes(torch.cat([
                 torch.mm(fcg_edges_l3_l2, msg_send_l2_nodes),
             ], dim=1))  
-            msg_rcv_triplet = self.fc_rcv_triplet(torch.cat([
+            msg_rcv_triplet = self.mlp_rcv_triplet(torch.cat([
                 torch.mm(bridge_edges_l1_tri, msg_send_l1_nodes),
             ], dim=1))
 
@@ -194,9 +191,44 @@ class FCGNet(Module):
             triplet = (1 - z_tri) * triplet + z_tri * h_tri
             del msg_rcv_triplet, r_tri, z_tri, h_tri
 
+            # 使用 FC 层而不是强制归一化特征
+            triplet = self.fc_triplet_logits(triplet)
+            fcg_l1_feats = self.fc_fcg_logits(fcg_l1_feats)
+            fcg_l2_feats = self.fc_fcg_logits(fcg_l2_feats)
+            fcg_l3_feats = self.fc_fcg_logits(fcg_l3_feats)
+
+        pred_cls_score = self.hierarchical_reasoning_fcg(triplet, sub_probs, obj_probs, fcg_l2_feats, fcg_l3_feats)
+        return pred_cls_score
+
+    def hierarchical_reasoning_fcg(self, bridge_edges_tri_l1, triplet, fcg_l2_feats, fcg_l3_feats):
+
+        num_img_all_rels = bridge_edges_tri_l1.size(0)
+        num_l1_nodes = bridge_edges_tri_l1.size(1)
+        num_l2_nodes = fcg_l2_feats.size(0)
+        num_l3_nodes = fcg_l3_feats.size(0)
+
+        l1_hier_prob = bridge_edges_tri_l1
+        l2_hier_prob_logit = torch.mm(triplet, fcg_l2_feats.t())
+        l3_hier_prob_logit = torch.mm(triplet, fcg_l3_feats.t())
+
+        # 构筑 l1/l2 到 l3 的下标映射
+        sub_l1_l3_idx_map = {}
+        obj_l1_l3_idx_map = {}
+
+        for l1_node in self.fcg.l1_nodes:
+            l2_subnodes = self.fcg.find_subnode(l1_node)
+            l2_subnodes_idx = [l2_node.idx for l2_node in l2_subnodes]
+            l3_subnodes = []
+            for l2_node in l2_subnodes:
+                l3_subnodes.append(self.fcg.find_subnode(l2_node))
+            l3_subnodes_idx = [l3_node.idx for l3_node in l3_subnodes]
+            # 主语模式
+            if l1_node.sub is not None:
+                sub_l1_l3_idx_map[l1_node.idx] = l3_subnodes_idx
+            # 宾语模式
+            if l1_node.obj is not None:
+                obj_l1_l3_idx_map[l1_node.idx] = l3_subnodes_idx
 
 
 
 
-
-        return pred_cls_score, scpred_cls_score

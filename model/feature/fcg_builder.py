@@ -19,6 +19,7 @@ class FCG_Node:
         self.obj = obj             # 宾语
         self.level = level         # 层级(1,2,3)
         self.feat = feat           # 节点特征
+        self.idx = -1              # 节点下标，在节点构建的最后时刻填充
         
         self.is_virtual = None
         if self.level == 3 and self.freq == 0:
@@ -161,7 +162,14 @@ class FCGBuilder:
                         # 将虚节点加入到相应的二级节点的子节点列表中
                         self.level2_sp_subnodes[sp_key].append(virtual_node)
                         self.level2_po_subnodes[po_key].append(virtual_node)
-                        
+        
+        # 所有节点构建完成，填充下标
+        for i, node in enumerate(self.l1_nodes):
+            node.idx = i
+        for i, node in enumerate(self.l2_nodes):
+            node.idx = i
+        for i, node in enumerate(self.l3_nodes):
+            node.idx = i
 
     def build_edges(self):
         """构建层级之间的边连接"""
@@ -185,7 +193,7 @@ class FCGBuilder:
                     
             # 遍历子节点,设置边权重
             for subnode in subnodes:
-                j = self.l3_nodes.index(subnode)
+                j = subnode.idx
                 if subnode.is_virtual:
                     weight = min_freq / (2 * virtual_count) # 最小词频的一半然后均分
                 else:
@@ -196,7 +204,7 @@ class FCGBuilder:
         for i, l1_node in enumerate(self.l1_nodes):
             subnodes = self.find_subnode(l1_node)
             for subnode in subnodes:
-                j = self.l2_nodes.index(subnode)
+                j = subnode.idx
                 self.edges_l1_l2[i][j] = subnode.freq / l1_node.freq
                     
 
@@ -213,6 +221,19 @@ class FCGBuilder:
         else:
             raise ValueError(f"This don't have subnodes: {node}")
         
+    def find_edge_weight(self, node1: FCG_Node, node2: FCG_Node):
+        try:
+            if node1.level == 1 and node2.level == 2:
+                return self.edges_l1_l2[node1.idx][node2.idx]
+            elif node1.level == 2 and node2.level == 3:
+                return self.edges_l2_l3[node1.idx][node2.idx]
+            else:
+                raise ValueError(f"This don't have edge weight: {node1} -> {node2}")
+        except Exception as e:
+            # 异常处理，针对越界或者值不存在的情况
+            print(f"查找边权重时发生错误: {e}")
+            return None
+
     def dump_nodes(self):
         """保存FCG的节点和边信息到文件"""
         

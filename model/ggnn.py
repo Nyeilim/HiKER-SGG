@@ -392,7 +392,7 @@ class GGNN(Module):
 
             # (i,j) 的值其实是两个 SP/CP 节点向量的内积，在两者尺度差别不大的情况下可当作相似度矩阵
             pred_cls_logits = torch.mm(nodes_img_pred_fc,nodes_ont_pred_fc.t())
-            edges_img2ont_pred = fn.softmax(pred_cls_logits, dim=1) # 通过 Softmax 将其压缩到 (0,1)
+            edges_img2ont_pred = fn.softmax(pred_cls_logits, dim=1) # 通过 Softmax 将其压缩到 (0,1)，更新桥边连接权重
             edges_ont2img_pred = edges_img2ont_pred.t()
 
             if refine_obj_cls: # False
