@@ -104,7 +104,7 @@ class FCGNet(Module):
         obj_mask[list(l1_nodes_obj_idx_map.keys)] = 1
 
         # 使用 VR 特征来作为三元组节点的特征，与 FCG 图一级节点建立桥边
-        bridge_edges_tri_l1 = torch.zeros((num_img_all_rels, len(fcg_l1_nodes)), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
+        bridge_edges_tri_l1 = torch.zeros((num_img_all_rels, len(fcg_l1_nodes)), dtype=torch.float32, device=CUDA_DEVICE)
         
         # 1. 根据 rel_inds 找到关系对应的 gt_boxes
         sub_boxes = rel_inds[:,0]  # 主语对应的 box 索引
@@ -203,30 +203,29 @@ class FCGNet(Module):
     def hierarchical_reasoning_fcg(self, bridge_edges_tri_l1, triplet, fcg_l2_feats, fcg_l3_feats):
 
         num_img_all_rels = bridge_edges_tri_l1.size(0)
-        num_l1_nodes = bridge_edges_tri_l1.size(1)
         num_l2_nodes = fcg_l2_feats.size(0)
         num_l3_nodes = fcg_l3_feats.size(0)
 
-        # 构筑 l1->l2 l1->l3 l2->l3 的下标映射
+        # 构筑 l1->l2 l1->l3 l2->l3 的子节点层级下标映射
         l1_l3_idx_map_sub = {}
-        l1_l2_idx_map_sub = {}
         l1_l3_idx_map_obj = {}
-        l1_l2_idx_map_obj = {}
+        l1_l2_idx_map = {}
         l2_l3_idx_map = {}
 
         for l1_node in self.fcg.l1_nodes:
             l2_subnodes = self.fcg.find_subnode(l1_node)
             l2_subnodes_idx = [l2_node.idx for l2_node in l2_subnodes]
+            l1_l2_idx_map[l1_node.idx] = l2_subnodes_idx
+
             l3_subnodes = []
             for l2_node in l2_subnodes:
-                l3_subnodes.append(self.fcg.find_subnode(l2_node))
+                l3_subnodes.extend(self.fcg.find_subnode(l2_node))
             l3_subnodes_idx = [l3_node.idx for l3_node in l3_subnodes]
+
             if l1_node.sub is not None:
                 l1_l3_idx_map_sub[l1_node.idx] = l3_subnodes_idx
-                l1_l2_idx_map_sub[l1_node.idx] = l2_subnodes_idx
             if l1_node.obj is not None:
                 l1_l3_idx_map_obj[l1_node.idx] = l3_subnodes_idx
-                l1_l2_idx_map_obj[l1_node.idx] = l2_subnodes_idx
 
         for l2_node in self.fcg.l2_nodes:
             l3_subnodes = self.fcg.find_subnode(l2_node)
@@ -238,40 +237,37 @@ class FCGNet(Module):
 
         # 计算 l2/l3 的层次（条件）概率
         l1_hier_prob = bridge_edges_tri_l1
-        l2_hier_prob = torch.zeros((num_img_all_rels, num_l2_nodes), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
-        l3_hier_prob = torch.zeros((num_img_all_rels, num_l3_nodes), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
-
-        for l1_idx, l2_subnodes_idx in l1_l2_idx_map_sub.items():
-            l2_hier_prob[:, l2_subnodes_idx] = fn.softmax(l2_hier_prob_logit[:, l2_subnodes_idx], dim=1)
+        l2_hier_prob = torch.zeros((num_img_all_rels, num_l2_nodes), dtype=torch.float32, device=CUDA_DEVICE)
+        l3_hier_prob = torch.zeros((num_img_all_rels, num_l3_nodes), dtype=torch.float32, device=CUDA_DEVICE)
             
-        for l1_idx, l2_subnodes_idx in l1_l2_idx_map_obj.items():
-            l2_hier_prob[:, l2_subnodes_idx] = fn.softmax(l2_hier_prob_logit[:, l2_subnodes_idx], dim=1)
+        for l1_idx, l2_subnodes_idx in l1_l2_idx_map.items():
+            l2_hier_prob[:, l2_subnodes_idx] = fn.softmax(l2_hier_prob_logit[:, l2_subnodes_idx], dim=1, dtype=torch.float32)
 
         for l2_idx, l3_subnodes_idx in l2_l3_idx_map.items():
-            l3_hier_prob[:, l3_subnodes_idx] = fn.softmax(l3_hier_prob_logit[:, l3_subnodes_idx], dim=1)
+            l3_hier_prob[:, l3_subnodes_idx] = fn.softmax(l3_hier_prob_logit[:, l3_subnodes_idx], dim=1, dtype=torch.float32)
 
         # 填充计算矩阵，三个计算矩阵的尺寸为 (num_img_all_rels, num_l3_nodes)，将三个矩阵作逐元素累乘，即为分类到 l3 某节点的最终概率
-        l1_hier_cpt_matrix_sub = torch.zeros((num_img_all_rels, num_l3_nodes), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
-        l1_hier_cpt_matrix_obj = torch.zeros((num_img_all_rels, num_l3_nodes), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
-        l2_hier_cpt_matrix = torch.zeros((num_img_all_rels, num_l3_nodes), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
+        l1_hier_cpt_matrix_sub = torch.zeros((num_img_all_rels, num_l3_nodes), dtype=torch.float32, device=CUDA_DEVICE)
+        l1_hier_cpt_matrix_obj = torch.zeros((num_img_all_rels, num_l3_nodes), dtype=torch.float32, device=CUDA_DEVICE)
+        l2_hier_cpt_matrix = torch.zeros((num_img_all_rels, num_l3_nodes), dtype=torch.float32, device=CUDA_DEVICE)
         l3_hier_cpt_matrix = l3_hier_prob
 
         # 值得注意，对于某个 l3 节点，从 l1 节点出发会有来自 sub/obj 的两条路径，因此需要将两条路径的概率相加
         # 在处理上，需要将 l1_hier_cpt_matrix 拆分为两个矩阵，避免 l3_subnodes_idx 上的值被重复覆盖
         for l1_idx, l3_subnodes_idx in l1_l3_idx_map_sub.items():
-            l1_hier_cpt_matrix_sub[:, l3_subnodes_idx] = l1_hier_prob[:, l1_idx]
+            l1_hier_cpt_matrix_sub[:, l3_subnodes_idx] = l1_hier_prob[:, l1_idx].unsqueeze(1)
 
         for l1_idx, l3_subnodes_idx in l1_l3_idx_map_obj.items():
-            l1_hier_cpt_matrix_obj[:, l3_subnodes_idx] = l1_hier_prob[:, l1_idx]
+            l1_hier_cpt_matrix_obj[:, l3_subnodes_idx] = l1_hier_prob[:, l1_idx].unsqueeze(1)
 
         for l2_idx, l3_subnodes_idx in l2_l3_idx_map.items():
             l2_hier_cpt_matrix[:, l3_subnodes_idx] = l2_hier_prob[:, l2_idx]
 
-        total_cls_prob = (l1_hier_cpt_matrix_sub  * l2_hier_cpt_matrix * l3_hier_cpt_matrix) 
+        total_cls_prob = (l1_hier_cpt_matrix_sub * l2_hier_cpt_matrix * l3_hier_cpt_matrix) 
         + (l1_hier_cpt_matrix_obj * l2_hier_cpt_matrix * l3_hier_cpt_matrix)
 
         # 合并三元组概率，反映射回谓词概率
-        pred_cls_prob = torch.zeros((num_img_all_rels, 51), dtype=torch.float32, device=CUDA_DEVICE, requires_grad=False)
+        pred_cls_prob = torch.zeros((num_img_all_rels, 51), dtype=torch.float32, device=CUDA_DEVICE)
         for i, l3_node in enumerate(self.fcg.l3_nodes):
             pred_cls_prob[:, l3_node.pred] += total_cls_prob[:, i]
 
