@@ -6,12 +6,15 @@ import torch.nn.functional as fn
 
 from model.util import MLP
 from model.feature.fcg_builder import FCGBuilder
+
 CUDA_DEVICE = torch.device(f'cuda:{current_device()}')
+
 
 class FCGNet(Module):
     """
     基于细粒度知识图(FCG)的场景图生成网络
     """
+
     def __init__(self, time_step_num=3, hidden_dim=1024):
         super(FCGNet, self).__init__()
         self.time_step_num = time_step_num
@@ -64,19 +67,18 @@ class FCGNet(Module):
         self.fc_triplet_logits = Linear(hidden_dim, hidden_dim)
         self.fc_fcg_logits = Linear(hidden_dim, hidden_dim)
 
-    def forward(self, rel_inds, ent_probs, obj_fmaps, vr):
+    def forward(self, rel_inds, ent_probs, vr):
         """
         FCG Net 的前向传播
         :param rel_inds: shape(img_all_rels,2) <s,o> 二元组
         :param ent_probs: shape(img_gt_boxes,151) boxes 的类别概率分布
-        :param obj_fmaps: shape(img_gt_boxes,1024) boxes 的特征图
         :param vr: shape(img_all_rels,1024) 关系的视觉特征
         :return: pred_cls_score: 谓词的预测概率
                 scpred_cls_score: 超类谓词的预测概率
         """
         num_img_gt_boxes = ent_probs.size(0)  # 图片中的实体数量
         num_img_all_rels = rel_inds.size(0)  # 图片中的关系数量
-        triplet = vr.clone() # 使用关系视觉特征作为三元组特征
+        triplet = vr.clone()  # 使用关系视觉特征作为三元组特征
 
         # 复制 FCG 节点特征
         fcg_l1_feats = torch.stack([node.feat for node in self.fcg.l1_nodes]).to(CUDA_DEVICE)
@@ -88,15 +90,15 @@ class FCGNet(Module):
         fcg_edges_l1_l2 = self.fcg.edges_l1_l2.to(CUDA_DEVICE)
         fcg_edges_l3_l2 = fcg_edges_l2_l3.t()
         fcg_edges_l2_l1 = fcg_edges_l1_l2.t()
-        
+
         # 数据集中 idx 映射到数组中 idx
         fcg_l1_nodes = self.fcg.l1_nodes
         l1_nodes_sub_idx_map = {}
         l1_nodes_obj_idx_map = {}
-        for i,node in enumerate(fcg_l1_nodes):
-            if node.sub is not None: # <sub,x,x>
+        for i, node in enumerate(fcg_l1_nodes):
+            if node.sub is not None:  # <sub,x,x>
                 l1_nodes_sub_idx_map[node.sub] = i
-            if node.obj is not None: # <x,x,obj>
+            if node.obj is not None:  # <x,x,obj>
                 l1_nodes_obj_idx_map[node.obj] = i
         sub_mask = torch.zeros((151,))
         sub_mask[list(l1_nodes_sub_idx_map.keys)] = 1
@@ -107,34 +109,34 @@ class FCGNet(Module):
         bridge_edges_tri_l1 = torch.zeros((num_img_all_rels, len(fcg_l1_nodes)), dtype=torch.float32, device=CUDA_DEVICE)
         
         # 1. 根据 rel_inds 找到关系对应的 gt_boxes
-        sub_boxes = rel_inds[:,0]  # 主语对应的 box 索引
-        obj_boxes = rel_inds[:,1]  # 宾语对应的 box 索引
-        
+        sub_boxes = rel_inds[:, 0]  # 主语对应的 box 索引
+        obj_boxes = rel_inds[:, 1]  # 宾语对应的 box 索引
+
         # 2. 获取 boxes 对应的实体类别概率分布
         sub_probs = ent_probs[sub_boxes]  # (num_rels, 151) 主语的类别概率
         obj_probs = ent_probs[obj_boxes]  # (num_rels, 151) 宾语的类别概率
-        
+
         # 3. 剔除不在 l1_nodes 中的实体概率并归一化
         sub_probs = sub_probs * sub_mask.to(CUDA_DEVICE)
         obj_probs = obj_probs * obj_mask.to(CUDA_DEVICE)
-        
+
         # 归一化概率
         # TODO：这里归一化出错怎么办？因为有大量无效数据，他们可能根本没有在训练集中出现
         sub_probs = fn.normalize(sub_probs, p=1, dim=1)
         obj_probs = fn.normalize(obj_probs, p=1, dim=1)
-        
+
         # 4. 建立桥边
         # 对于每个关系,将主语概率分配给对应的主语模式一级节点
         for i in range(num_img_all_rels):
             for ent_idx, prob in enumerate(sub_probs[i]):
                 if prob > 0 and ent_idx in l1_nodes_sub_idx_map:
                     bridge_edges_tri_l1[i][l1_nodes_sub_idx_map[ent_idx]] = prob
-                    
+
             # 将宾语概率分配给对应的宾语模式一级节点
             for ent_idx, prob in enumerate(obj_probs[i]):
                 if prob > 0 and ent_idx in l1_nodes_obj_idx_map:
                     bridge_edges_tri_l1[i][l1_nodes_obj_idx_map[ent_idx]] = prob
-                    
+
         # 归一化桥边权重，使每个关系的总权重为 1；这边的主宾语权重融合可以做考虑，现在是 1/2 的情况
         # 可以考虑看分布的最大概率，如果主语的最大概率高于宾语，那么预测分支应该更加偏向于主语分支
         bridge_edges_tri_l1 = fn.normalize(bridge_edges_tri_l1, p=1, dim=1)
@@ -158,7 +160,7 @@ class FCGNet(Module):
             ], dim=1))
             msg_rcv_l3_nodes = self.mlp_rcv_l3_nodes(torch.cat([
                 torch.mm(fcg_edges_l3_l2, msg_send_l2_nodes),
-            ], dim=1))  
+            ], dim=1))
             msg_rcv_triplet = self.mlp_rcv_triplet(torch.cat([
                 torch.mm(bridge_edges_l1_tri, msg_send_l1_nodes),
             ], dim=1))
@@ -178,13 +180,13 @@ class FCGNet(Module):
             h_l2 = torch.tanh(self.fc_eq5_w_l2(msg_rcv_l2_nodes) + self.fc_eq5_u_l2(r_l2 * fcg_l2_feats))
             fcg_l2_feats = (1 - z_l2) * fcg_l2_feats + z_l2 * h_l2
             del msg_rcv_l2_nodes, r_l2, z_l2, h_l2
-            
+
             z_l3 = torch.sigmoid(self.fc_eq3_w_l3(msg_rcv_l3_nodes) + self.fc_eq3_u_l3(fcg_l3_feats))
             r_l3 = torch.sigmoid(self.fc_eq4_w_l3(msg_rcv_l3_nodes) + self.fc_eq4_u_l3(fcg_l3_feats))
             h_l3 = torch.tanh(self.fc_eq5_w_l3(msg_rcv_l3_nodes) + self.fc_eq5_u_l3(r_l3 * fcg_l3_feats))
             fcg_l3_feats = (1 - z_l3) * fcg_l3_feats + z_l3 * h_l3
             del msg_rcv_l3_nodes, r_l3, z_l3, h_l3
-            
+
             z_tri = torch.sigmoid(self.fc_eq3_w_tri(msg_rcv_triplet) + self.fc_eq3_u_tri(triplet))
             r_tri = torch.sigmoid(self.fc_eq4_w_tri(msg_rcv_triplet) + self.fc_eq4_u_tri(triplet))
             h_tri = torch.tanh(self.fc_eq5_w_tri(msg_rcv_triplet) + self.fc_eq5_u_tri(r_tri * triplet))
@@ -197,7 +199,7 @@ class FCGNet(Module):
             fcg_l2_feats = self.fc_fcg_logits(fcg_l2_feats)
             fcg_l3_feats = self.fc_fcg_logits(fcg_l3_feats)
 
-        pred_cls_score = self.hierarchical_reasoning_fcg(triplet, sub_probs, obj_probs, fcg_l2_feats, fcg_l3_feats)
+        pred_cls_score = self.hierarchical_reasoning_fcg(bridge_edges_tri_l1, triplet, fcg_l2_feats, fcg_l3_feats)
         return pred_cls_score
 
     def hierarchical_reasoning_fcg(self, bridge_edges_tri_l1, triplet, fcg_l2_feats, fcg_l3_feats):
@@ -239,7 +241,7 @@ class FCGNet(Module):
         l1_hier_prob = bridge_edges_tri_l1
         l2_hier_prob = torch.zeros((num_img_all_rels, num_l2_nodes), dtype=torch.float32, device=CUDA_DEVICE)
         l3_hier_prob = torch.zeros((num_img_all_rels, num_l3_nodes), dtype=torch.float32, device=CUDA_DEVICE)
-            
+
         for l1_idx, l2_subnodes_idx in l1_l2_idx_map.items():
             l2_hier_prob[:, l2_subnodes_idx] = fn.softmax(l2_hier_prob_logit[:, l2_subnodes_idx], dim=1, dtype=torch.float32)
 
@@ -263,8 +265,8 @@ class FCGNet(Module):
         for l2_idx, l3_subnodes_idx in l2_l3_idx_map.items():
             l2_hier_cpt_matrix[:, l3_subnodes_idx] = l2_hier_prob[:, l2_idx]
 
-        total_cls_prob = (l1_hier_cpt_matrix_sub * l2_hier_cpt_matrix * l3_hier_cpt_matrix) 
-        + (l1_hier_cpt_matrix_obj * l2_hier_cpt_matrix * l3_hier_cpt_matrix)
+        total_cls_prob = (l1_hier_cpt_matrix_sub * l2_hier_cpt_matrix * l3_hier_cpt_matrix) + (
+                    l1_hier_cpt_matrix_obj * l2_hier_cpt_matrix * l3_hier_cpt_matrix)
 
         # 合并三元组概率，反映射回谓词概率
         pred_cls_prob = torch.zeros((num_img_all_rels, 51), dtype=torch.float32, device=CUDA_DEVICE)
