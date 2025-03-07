@@ -101,9 +101,9 @@ class FCGNet(Module):
             if node.obj is not None:  # <x,x,obj>
                 l1_nodes_obj_idx_map[node.obj] = i
         sub_mask = torch.zeros((151,))
-        sub_mask[list(l1_nodes_sub_idx_map.keys)] = 1
+        sub_mask[list(l1_nodes_sub_idx_map.keys())] = 1
         obj_mask = torch.zeros((151,))
-        obj_mask[list(l1_nodes_obj_idx_map.keys)] = 1
+        obj_mask[list(l1_nodes_obj_idx_map.keys())] = 1
 
         # 使用 VR 特征来作为三元组节点的特征，与 FCG 图一级节点建立桥边
         bridge_edges_tri_l1 = torch.zeros((num_img_all_rels, len(fcg_l1_nodes)), dtype=torch.float32, device=CUDA_DEVICE)

@@ -20,6 +20,7 @@ from model.object_detector import ObjectDetector, gather_res, load_vgg
 from model.pytorch_misc import onehot_logits, arange, enumerate_by_image, diagonal_inds, Flattener
 from model.resnet import resnet_l4
 from model.surgery import filter_dets
+from model.refactor.fcg_net import FCGNet
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -60,6 +61,9 @@ class GGNNRelReason(Module):
                          with_clean_classifier=self.with_clean_classifier, with_transfer=self.with_transfer,
                          sa=sa, num_obj_cls=self.num_obj_cls, num_rel_cls=self.num_rel_cls)
 
+        # FCG 网络
+        self.fcg_net = FCGNet()
+
     # 这个 forward 方法是 Module 抽象类里面待实现的 Callable 方法
     def forward(self, im_inds, obj_fmaps, obj_logits, rel_inds, vr, obj_labels=None, boxes_per_cls=None):
         """
@@ -78,17 +82,22 @@ class GGNNRelReason(Module):
         obj_logits_refined = []
         scpred_softmax = []
         scent_softmax= []
+        fcg_pred_softmax = []
         for (_, obj_s, obj_e), (_, rel_s, rel_e) in zip(enumerate_by_image(im_inds.data), enumerate_by_image(rel_inds[:,0])):
             # 调用 GGNN 内核，然后把前向传播的每个结果添加到前面的列表中。这里的返回值只有 rl scpred 有值
             rl, ol, scpred, scent = self.ggnn(rel_inds[rel_s:rel_e, 1:] - obj_s, obj_probs[obj_s:obj_e], obj_fmaps[obj_s:obj_e], vr[rel_s:rel_e]) # 实际上是每次前向传播，是处理一张图片的数据
+            fcg_pred_cls = self.fcg_net(rel_inds[rel_s:rel_e, 1:], obj_probs[obj_s:obj_e], vr[rel_s:rel_e]) # 调用 FCG 网络，生成谓词预测
+
             rel_logits.append(rl)
             obj_logits_refined.append(ol)
             scpred_softmax.append(scpred)
             scent_softmax.append(scent)
+            fcg_pred_softmax.append(fcg_pred_cls)
 
         # 列表转二维 tensor
         rel_logits = torch_cat(rel_logits, 0) # shape(all_rels, 51)
         scpred_softmax = torch_cat(scpred_softmax, 0) # shape(all_rels, 18)
+        fcg_pred_softmax = torch_cat(fcg_pred_softmax, 0) # shape(all_rels, 51)
 
         if self.ggnn.refine_obj_cls: # False
             obj_logits_refined = torch_cat(obj_logits_refined, 0)
@@ -117,7 +126,7 @@ class GGNNRelReason(Module):
         else:
             obj_preds = obj_labels if obj_labels is not None else obj_probs[:,1:].max(1)[1] + 1 # PredCl 和 SGCl 任务不用做分类，直接拿真实标签作为 entity 的预测标签
 
-        return obj_logits, obj_preds, rel_logits, scpred_softmax, scent_softmax
+        return obj_logits, obj_preds, rel_logits, scpred_softmax, scent_softmax, fcg_pred_softmax
 
 
 class HiKER(Module):
@@ -263,7 +272,7 @@ class HiKER(Module):
 
         # 调用 GGNN 进行预测，通过实例名调用 Callable 方法，也就是 forward 方法
         (result.rm_obj_dists, result.obj_preds, result.rel_dists,
-         result.scpred_softmax, result.scent_softmax) = self.ggnn_rel_reason(
+         result.scpred_softmax, result.scent_softmax, result.fcg_pred_softmax) = self.ggnn_rel_reason(
             im_inds=im_inds,
             obj_fmaps=result.obj_fmap,
             obj_logits=result.rm_obj_dists,
@@ -273,6 +282,7 @@ class HiKER(Module):
             boxes_per_cls=result.boxes_all # None
         )
 
+        # 如果是训练，这里直接返回去算损失了；如果是测试/验证，会往下走算出具体的标签分布
         if self.training:
             return result
 
@@ -286,7 +296,8 @@ class HiKER(Module):
             # Boxes will get fixed by filter_dets function.
             bboxes = result.rm_box_priors
 
-        rel_rep = result.rel_dists
+        # GGNN FCGNet 两条分支给出的概率分布作融合，如果不想启用 FCGNet 则直接返回 GGNN 的概率分布
+        rel_rep = 0.9 * result.rel_dists + 0.1 * result.fcg_pred_softmax
         # rel_rep = F_softmax(result.rel_dists, dim=1)
 
         return filter_dets(bboxes, result.obj_scores,
@@ -366,6 +377,9 @@ class HiKER(Module):
             # return F_cross_entropy(result.rm_obj_dists, result.rm_obj_labels)
         else:
             return torch_zeros(1, requires_grad=False, device=CURRENT_DEVICE, dtype=torch_float32)
+        
+    def fcg_loss(self, result):
+        return F_nll_loss(torch_log(result.fcg_pred_softmax + 1e-10), result.rel_labels[:, -1])
 
     def rel_loss(self, result):  # 这里做损失的 rel_dists 已经是经过 Softmax 后的，torch.sum(rel_dists[0]) == 1，所以直接过 Log 再过 NLL 就好
         return F_nll_loss(torch_log(result.rel_dists + 1e-10), result.rel_labels[:, -1],

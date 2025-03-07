@@ -49,8 +49,9 @@ def train_batch(model, conf, batch, optimizer, verbose=False):
         loss_class = model.obj_loss(result) # refine_obj_cls 为 False 情况下默认返回 0
         loss_rel = model.rel_loss(result)
         loss_scpred = model.scpred_loss(result)
+        loss_fcg = model.fcg_loss(result)
 
-        loss = loss_class + loss_rel + loss_scpred # 成本函数
+        loss = loss_class + loss_rel + loss_scpred + loss_fcg # 成本函数
     with amp.scale_loss(loss, optimizer) as scaled_loss: # 损失缩放，混合精度
         scaled_loss.backward() # 启用反向传播，计算出各个参数的梯度
     clip_grad_norm([(n, p) for n, p in model.named_parameters() if p.grad is not None],  # 所有叶子节点，即 W、B
@@ -60,5 +61,6 @@ def train_batch(model, conf, batch, optimizer, verbose=False):
         'loss_class': float(loss_class),
         'loss_rel': float(loss_rel),
         'loss_scpred': float(loss_scpred),
+        'loss_fcg': float(loss_fcg),
         'loss_total': float(loss),
     }

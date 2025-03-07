@@ -30,7 +30,7 @@ class Result(object):
                  od_box_targets=None, rm_box_targets=None, od_box_priors=None, rm_box_priors=None,
                  boxes_assigned=None, boxes_all=None, od_obj_labels=None, rm_obj_labels=None,
                  rpn_scores=None, rpn_box_deltas=None, rel_labels=None,
-                 im_inds=None, fmap=None, rel_dists=None, rel_inds=None, rel_rep=None):
+                 im_inds=None, fmap=None, rel_dists=None, rel_inds=None, rel_rep=None, fcg_pred_softmax=None):
         self.__dict__.update(locals())
         del self.__dict__['self']
 
