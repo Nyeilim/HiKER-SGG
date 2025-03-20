@@ -20,7 +20,7 @@ from model.object_detector import ObjectDetector, gather_res, load_vgg
 from model.pytorch_misc import onehot_logits, arange, enumerate_by_image, diagonal_inds, Flattener
 from model.resnet import resnet_l4
 from model.surgery import filter_dets
-from model.refactor.fcg_net import FCGNet
+from model.feature.fcg_net import FCGNet
 
 np.set_printoptions(threshold=sys.maxsize)
 
