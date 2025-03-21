@@ -10,7 +10,7 @@ from model.dataloaders.visual_genome import load_info
 from config import NODE_EMBEDDING, EDGE_MATRIX, VG_SGG_DICT_FN
 
 
-class FCG_Node:
+class FCGNode:
     """FCG图中的节点类，用于统一管理节点信息"""
     def __init__(self, sub=None, pred=None, obj=None, level=None, freq=None, feat=None):
         self.freq = freq           # 词频，样本数量
@@ -38,7 +38,7 @@ class FCGBuilder:
         with open(NODE_EMBEDDING, 'rb') as f:
             self.emb_ent, self.emb_pred = pickle.load(f)
         self.edge_matrix = np.load(EDGE_MATRIX) # 151x151x51
-        self.emb_fc = Linear(self.emb_ent.size(1) * 2 + self.emb_pred.size(1), hidden_dim)
+        self.emb_fc = Linear(self.emb_ent.shape[1] * 2 + self.emb_pred.shape[1], hidden_dim)
         
         # 按层级存储节点
         self.l1_nodes = []  # 第一级节点
@@ -66,12 +66,12 @@ class FCGBuilder:
                     if freq > 0:
                         # 计算节点特征
                         feat = self.emb_fc(torch.cat([
-                            torch.tensor(self.emb_ent[s]),
-                            torch.tensor(self.emb_pred[p]),
-                            torch.tensor(self.emb_ent[o])
+                            torch.tensor(self.emb_ent[s], dtype=torch.float32),
+                            torch.tensor(self.emb_pred[p], dtype=torch.float32),
+                            torch.tensor(self.emb_ent[o], dtype=torch.float32)
                         ]))
                         
-                        node = FCG_Node(sub=s, pred=p, obj=o, level=3, freq=freq, feat=feat)
+                        node = FCGNode(sub=s, pred=p, obj=o, level=3, freq=freq, feat=feat)
                         self.l3_nodes.append(node)
                         level3_real_nodes.add((s,p,o))
                         
@@ -98,16 +98,16 @@ class FCGBuilder:
         for sp_key, subnodes in self.level2_sp_subnodes.items():
             total_freq = sum(node.freq for node in subnodes)
             avg_feat = sum(node.feat for node in subnodes) / len(subnodes)
-            sp_node = FCG_Node(sub=sp_key[0], pred=sp_key[1], level=2,
-                             freq=total_freq, feat=avg_feat)
+            sp_node = FCGNode(sub=sp_key[0], pred=sp_key[1], level=2,
+                              freq=total_freq, feat=avg_feat)
             level2_sp_nodes[sp_key] = sp_node
             
         # 创建(p,o)模式的二级节点
         for po_key, subnodes in self.level2_po_subnodes.items():
             total_freq = sum(node.freq for node in subnodes)
             avg_feat = sum(node.feat for node in subnodes) / len(subnodes)
-            po_node = FCG_Node(pred=po_key[0], obj=po_key[1], level=2,
-                             freq=total_freq, feat=avg_feat)
+            po_node = FCGNode(pred=po_key[0], obj=po_key[1], level=2,
+                              freq=total_freq, feat=avg_feat)
             level2_po_nodes[po_key] = po_node
 
         self.l2_nodes.extend(list(level2_sp_nodes.values()) + list(level2_po_nodes.values()))
@@ -136,14 +136,14 @@ class FCGBuilder:
         for s, subnodes in self.level1_s_subnodes.items():
             total_freq = sum(node.freq for node in subnodes)
             avg_feat = sum(node.feat for node in subnodes) / len(subnodes)
-            s_node = FCG_Node(sub=s, level=1, freq=total_freq, feat=avg_feat)
+            s_node = FCGNode(sub=s, level=1, freq=total_freq, feat=avg_feat)
             level1_s_nodes[s] = s_node
             
         # 创建宾语模式的一级节点
         for o, subnodes in self.level1_o_subnodes.items():
             total_freq = sum(node.freq for node in subnodes)
             avg_feat = sum(node.feat for node in subnodes) / len(subnodes)
-            o_node = FCG_Node(obj=o, level=1, freq=total_freq, feat=avg_feat)
+            o_node = FCGNode(obj=o, level=1, freq=total_freq, feat=avg_feat)
             level1_o_nodes[o] = o_node
             
         self.l1_nodes.extend(list(level1_s_nodes.values()) + list(level1_o_nodes.values()))
@@ -153,11 +153,13 @@ class FCGBuilder:
             for po_node in level2_po_nodes.values():
                 if sp_node.pred == po_node.pred:  # 谓词相同
                     triple = (sp_node.sub, sp_node.pred, po_node.obj)
+                    sp_key = (sp_node.sub, sp_node.pred)
+                    po_key = (po_node.pred, po_node.obj)
                     if triple not in level3_real_nodes:  # 不是真实节点
                         # 虚节点特征为相关二级节点的平均
                         virtual_feat = (sp_node.feat + po_node.feat) / 2
-                        virtual_node = FCG_Node(sub=sp_node.sub, pred=sp_node.pred, obj=po_node.obj,
-                                              level=3, freq=0, feat=virtual_feat)
+                        virtual_node = FCGNode(sub=sp_node.sub, pred=sp_node.pred, obj=po_node.obj,
+                                               level=3, freq=0, feat=virtual_feat)
                         self.l3_nodes.append(virtual_node)
                         # 将虚节点加入到相应的二级节点的子节点列表中
                         self.level2_sp_subnodes[sp_key].append(virtual_node)
@@ -208,7 +210,7 @@ class FCGBuilder:
                 self.edges_l1_l2[i][j] = subnode.freq / l1_node.freq
                     
 
-    def find_subnode(self, node: FCG_Node):
+    def find_subnode(self, node: FCGNode):
         assert node.level != 3
         if node.level == 1 and node.sub is not None:
             return self.level1_s_subnodes.get(node.sub, [])
@@ -221,7 +223,7 @@ class FCGBuilder:
         else:
             raise ValueError(f"This don't have subnodes: {node}")
         
-    def find_edge_weight(self, node1: FCG_Node, node2: FCG_Node):
+    def find_edge_weight(self, node1: FCGNode, node2: FCGNode):
         try:
             if node1.level == 1 and node2.level == 2:
                 return self.edges_l1_l2[node1.idx][node2.idx]
