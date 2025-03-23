@@ -76,8 +76,12 @@ class FCGNet(Module):
         :return: pred_cls_score: 谓词的预测概率
                 scpred_cls_score: 超类谓词的预测概率
         """
+        # 切断与原计算图的联系
+        rel_inds = rel_inds.detach()
+        ent_probs = ent_probs.detach()
+        vr = vr.detach()
+
         triplet = vr.clone()  # 使用关系视觉特征作为三元组特征
-        num_img_all_rels = triplet.size(0)  # 图片中的关系数量
 
         # 复制 FCG 节点特征
         fcg_l1_feats = torch.stack([node.feat for node in self.fcg.l1_nodes]).to(CUDA_DEVICE)
@@ -114,7 +118,7 @@ class FCGNet(Module):
                 torch.mm(fcg_edges_l3_l2, msg_send_l2_nodes),
             ], dim=1))
             msg_rcv_triplet = self.mlp_rcv_triplet(torch.cat([
-                torch.mm(bridge_edges_l1_tri, msg_send_l1_nodes),
+                torch.mm(bridge_edges_tri_l1, msg_send_l1_nodes),
             ], dim=1))
 
             # 释放引用
@@ -218,7 +222,7 @@ class FCGNet(Module):
             l1_hier_cpt_matrix_obj[:, l3_subnodes_idx] = l1_hier_prob[:, l1_idx].unsqueeze(1)
 
         for l2_idx, l3_subnodes_idx in l2_l3_idx_map.items():
-            l2_hier_cpt_matrix[:, l3_subnodes_idx] = l2_hier_prob[:, l2_idx]
+            l2_hier_cpt_matrix[:, l3_subnodes_idx] = l2_hier_prob[:, l2_idx].unsqueeze(1)
 
         total_cls_prob = (l1_hier_cpt_matrix_sub * l2_hier_cpt_matrix * l3_hier_cpt_matrix) + (
                     l1_hier_cpt_matrix_obj * l2_hier_cpt_matrix * l3_hier_cpt_matrix)
@@ -267,10 +271,14 @@ class FCGNet(Module):
         sub_mask[list(l1_nodes_sub_idx_map.keys())] = 1
         obj_mask = torch.zeros((151,))
         obj_mask[list(l1_nodes_obj_idx_map.keys())] = 1
-        
+
         # 1. 根据 rel_inds 找到关系对应的 gt_boxes
         sub_boxes = rel_inds[:, 0]  # 主语对应的 box 索引
         obj_boxes = rel_inds[:, 1]  # 宾语对应的 box 索引
+
+        debug_info = {'ent_probs': ent_probs.cpu().numpy(), 'sub_boxes': sub_boxes.cpu().numpy(), 'obj_boxes': obj_boxes.cpu().numpy()}
+        assert torch.all((0 <= rel_inds[:, 0]) & (rel_inds[:, 0] < ent_probs.size(0))), debug_info
+        assert torch.all((0 <= rel_inds[:, 1]) & (rel_inds[:, 1] < ent_probs.size(0))), debug_info
 
         # 2. 获取 boxes 对应的实体类别概率分布
         sub_probs = ent_probs[sub_boxes]  # (num_rels, 151) 主语的类别概率

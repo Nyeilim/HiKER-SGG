@@ -86,7 +86,7 @@ class GGNNRelReason(Module):
         for (_, obj_s, obj_e), (_, rel_s, rel_e) in zip(enumerate_by_image(im_inds.data), enumerate_by_image(rel_inds[:,0])):
             # 调用 GGNN 内核，然后把前向传播的每个结果添加到前面的列表中。这里的返回值只有 rl scpred 有值
             rl, ol, scpred, scent = self.ggnn(rel_inds[rel_s:rel_e, 1:] - obj_s, obj_probs[obj_s:obj_e], obj_fmaps[obj_s:obj_e], vr[rel_s:rel_e]) # 实际上是每次前向传播，是处理一张图片的数据
-            fcg_pred_cls = self.fcg_net(rel_inds[rel_s:rel_e, 1:], obj_probs[obj_s:obj_e], vr[rel_s:rel_e]) # 调用 FCG 网络，生成谓词预测
+            fcg_pred_cls = self.fcg_net(rel_inds[rel_s:rel_e, 1:] - obj_s, obj_probs[obj_s:obj_e], vr[rel_s:rel_e]) # 调用 FCG 网络，生成谓词预测
 
             rel_logits.append(rl)
             obj_logits_refined.append(ol)

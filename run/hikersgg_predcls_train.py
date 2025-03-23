@@ -31,8 +31,8 @@ conf = ModelConfig(f'''
 -save_dir checkpoints/kern_predcls/{exp_name}
 -ckpt checkpoints/vgdet/vgrel-11.tar
 -val_size 5000
--b 8
--nwork 24
+-b 4
+-nwork 8
 -ngpu 1
 -lr 1e-4
 -nepoch 20
