@@ -148,22 +148,22 @@ class FCGBuilder:
             
         self.l1_nodes.extend(list(level1_s_nodes.values()) + list(level1_o_nodes.values()))
         
-        # 4. 构建虚节点
-        for sp_node in level2_sp_nodes.values():
-            for po_node in level2_po_nodes.values():
-                if sp_node.pred == po_node.pred:  # 谓词相同
-                    triple = (sp_node.sub, sp_node.pred, po_node.obj)
-                    sp_key = (sp_node.sub, sp_node.pred)
-                    po_key = (po_node.pred, po_node.obj)
-                    if triple not in level3_real_nodes:  # 不是真实节点
-                        # 虚节点特征为相关二级节点的平均
-                        virtual_feat = (sp_node.feat + po_node.feat) / 2
-                        virtual_node = FCGNode(sub=sp_node.sub, pred=sp_node.pred, obj=po_node.obj,
-                                               level=3, freq=0, feat=virtual_feat)
-                        self.l3_nodes.append(virtual_node)
-                        # 将虚节点加入到相应的二级节点的子节点列表中
-                        self.level2_sp_subnodes[sp_key].append(virtual_node)
-                        self.level2_po_subnodes[po_key].append(virtual_node)
+        # # 4. 构建虚节点，这部会引入大量的虚拟节点，导致内存溢出。所以我先关闭这个特性
+        # for sp_node in level2_sp_nodes.values():
+        #     for po_node in level2_po_nodes.values():
+        #         if sp_node.pred == po_node.pred:  # 谓词相同
+        #             triple = (sp_node.sub, sp_node.pred, po_node.obj)
+        #             sp_key = (sp_node.sub, sp_node.pred)
+        #             po_key = (po_node.pred, po_node.obj)
+        #             if triple not in level3_real_nodes:  # 不是真实节点
+        #                 # 虚节点特征为相关二级节点的平均
+        #                 virtual_feat = (sp_node.feat + po_node.feat) / 2
+        #                 virtual_node = FCGNode(sub=sp_node.sub, pred=sp_node.pred, obj=po_node.obj,
+        #                                        level=3, freq=0, feat=virtual_feat)
+        #                 self.l3_nodes.append(virtual_node)
+        #                 # 将虚节点加入到相应的二级节点的子节点列表中
+        #                 self.level2_sp_subnodes[sp_key].append(virtual_node)
+        #                 self.level2_po_subnodes[po_key].append(virtual_node)
         
         # 所有节点构建完成，填充下标
         for i, node in enumerate(self.l1_nodes):
