@@ -76,12 +76,8 @@ class FCGNet(Module):
         :return: pred_cls_score: 谓词的预测概率
                 scpred_cls_score: 超类谓词的预测概率
         """
-        # 切断与原计算图的联系
-        rel_inds = rel_inds.detach()
-        ent_probs = ent_probs.detach()
-        vr = vr.detach()
-
-        triplet = vr.clone()  # 使用关系视觉特征作为三元组特征
+        # 切断与原计算图的联系，只有传过来的 vr 是连接着计算图的，切断
+        triplet = vr.clone().detach()  # 使用关系视觉特征作为三元组特征
 
         # 复制 FCG 节点特征
         fcg_l1_feats = torch.stack([node.feat for node in self.fcg.l1_nodes]).to(CUDA_DEVICE)
@@ -295,7 +291,7 @@ class FCGNet(Module):
         sub_sum = torch.sum(sub_probs, dim=1)  # 每行主语概率之和
         obj_sum = torch.sum(obj_probs, dim=1)  # 每行宾语概率之和
         
-        # 找出主语或宾语概率和为 0 的行
+        # 找出主语或宾语概率和为 0 的行  TODO: 这里好像写的有点问题，normal_reL_mask 没筛掉东西
         zero_mask = (sub_sum == 0) | (obj_sum == 0)
         normal_rel_mask[zero_mask] = False
 

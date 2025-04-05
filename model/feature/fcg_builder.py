@@ -34,6 +34,8 @@ class FCGBuilder:
     """构建细粒度常识图(Finegrained Commonsense Graph)"""
     
     def __init__(self, hidden_dim):
+        print("开始构建 FCG_Net")
+
         # 加载词嵌入和边统计矩阵
         with open(NODE_EMBEDDING, 'rb') as f:
             self.emb_ent, self.emb_pred = pickle.load(f)
@@ -69,7 +71,7 @@ class FCGBuilder:
                             torch.tensor(self.emb_ent[s], dtype=torch.float32),
                             torch.tensor(self.emb_pred[p], dtype=torch.float32),
                             torch.tensor(self.emb_ent[o], dtype=torch.float32)
-                        ]))
+                        ])).detach()
                         
                         node = FCGNode(sub=s, pred=p, obj=o, level=3, freq=freq, feat=feat)
                         self.l3_nodes.append(node)

@@ -379,7 +379,7 @@ class HiKER(Module):
             return torch_zeros(1, requires_grad=False, device=CURRENT_DEVICE, dtype=torch_float32)
         
     def fcg_loss(self, result):
-        return F_nll_loss(torch_log(result.fcg_pred_softmax + 1e-10), result.rel_labels[:, -1])
+        return F_nll_loss(torch_log(result.fcg_pred_softmax + 1e-10), result.rel_labels[:, -1]) # result.rel_labels 未连接到计算图
 
     def rel_loss(self, result):  # 这里做损失的 rel_dists 已经是经过 Softmax 后的，torch.sum(rel_dists[0]) == 1，所以直接过 Log 再过 NLL 就好
         return F_nll_loss(torch_log(result.rel_dists + 1e-10), result.rel_labels[:, -1],

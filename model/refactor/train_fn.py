@@ -56,7 +56,7 @@ def train_batch(model, conf, batch, optimizer, verbose=False):
         scaled_loss.backward() # 启用反向传播，计算出各个参数的梯度
     clip_grad_norm([(n, p) for n, p in model.named_parameters() if p.grad is not None],  # 所有叶子节点，即 W、B
                    max_norm=conf.clip, verbose=verbose, clip=True) # 梯度裁剪，所有参数梯度 L2 范数的和不能超过 conf.clip
-    optimizer.step() # 梯度下降
+    optimizer.step() # 梯度下降，更新参数
     return result, {
         'loss_class': float(loss_class),
         'loss_rel': float(loss_rel),
