@@ -41,8 +41,8 @@ class FCGBuilder:
         # 初始化正交投影矩阵，构建映射 900->1024
         input_dim = self.emb_ent.shape[1] * 2 + self.emb_pred.shape[1]
         output_dim = hidden_dim
-        M, _ = torch.linalg.qr(torch.randn(output_dim, input_dim))  # 生成正交基
-        self.proj_matrix = (M.T * np.sqrt(output_dim / input_dim)).T  # 缩放保持方差
+        M, _ = torch.linalg.qr(torch.randn(input_dim, output_dim))  # 生成正交基
+        self.proj_matrix = M * np.sqrt(output_dim / input_dim)  # 缩放保持方差
         self.proj_matrix.requires_grad_(False)  # 禁用梯度
 
         # 按层级存储节点
@@ -78,12 +78,11 @@ class FCGBuilder:
                     freq = self.edge_matrix[s, o, p]
                     if freq > 0:
                         # 计算节点特征
-                        raw_emb = torch.cat([
+                        feat = torch.cat([
                             torch.tensor(self.emb_ent[s], dtype=torch.float32),
                             torch.tensor(self.emb_pred[p], dtype=torch.float32),
                             torch.tensor(self.emb_ent[o], dtype=torch.float32)
-                        ])
-                        feat = torch.matmul(raw_emb, self.proj_matrix)
+                        ]) @ self.proj_matrix  # (900,) @ (900,1024) -> (1024,)
 
                         node = FCGNode(sub=s, pred=p, obj=o, level=3, freq=freq, feat=feat)
                         self.l3_nodes.append(node)
@@ -261,4 +260,4 @@ class FCGBuilder:
 # 该文件作为模块导入时，下面这行代码不会被执行
 if __name__ == '__main__':
     fcg_builder = FCGBuilder(hidden_dim=1024)
-    sample = fcg_builder.get_sample(1,2)
+    sample = fcg_builder.get_sample(1, 2)
