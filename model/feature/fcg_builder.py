@@ -253,7 +253,7 @@ class FCGBuilder:
             'level1_s_subnodes': sum(len(nodes) for nodes in self.level1_s_subnodes.values()),
             'level1_o_subnodes': sum(len(nodes) for nodes in self.level1_o_subnodes.values())
         }
-        assert counts['level2_sp_subnodes'] + counts['level2_po_subnodes'] == len(self.l3_nodes)
+        assert counts['level2_sp_subnodes'] == counts['level2_po_subnodes'] == len(self.l3_nodes)
         assert counts['level1_s_subnodes'] + counts['level1_o_subnodes'] == len(self.l2_nodes)
 
 
