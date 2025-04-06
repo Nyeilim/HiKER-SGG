@@ -1,3 +1,5 @@
+from operator import indexOf
+
 import numpy as np
 import torch
 from torch.cuda import current_device
@@ -263,50 +265,39 @@ class FCGNet(Module):
                 l1_nodes_sub_idx_map[node.sub] = i
             if node.obj is not None:  # <x,x,obj>
                 l1_nodes_obj_idx_map[node.obj] = i
-        sub_mask = torch.zeros((151,))
-        sub_mask[list(l1_nodes_sub_idx_map.keys())] = 1
-        obj_mask = torch.zeros((151,))
-        obj_mask[list(l1_nodes_obj_idx_map.keys())] = 1
+        # sub_mask = torch.zeros((151,))
+        # sub_mask[list(l1_nodes_sub_idx_map.keys())] = 1
+        # obj_mask = torch.zeros((151,))
+        # obj_mask[list(l1_nodes_obj_idx_map.keys())] = 1
 
         # 1. 根据 rel_inds 找到关系对应的 gt_boxes
         sub_boxes = rel_inds[:, 0]  # 主语对应的 box 索引
         obj_boxes = rel_inds[:, 1]  # 宾语对应的 box 索引
 
-        debug_info = {'ent_probs': ent_probs.cpu().numpy(), 'sub_boxes': sub_boxes.cpu().numpy(), 'obj_boxes': obj_boxes.cpu().numpy()}
-        assert torch.all((0 <= rel_inds[:, 0]) & (rel_inds[:, 0] < ent_probs.size(0))), debug_info
-        assert torch.all((0 <= rel_inds[:, 1]) & (rel_inds[:, 1] < ent_probs.size(0))), debug_info
-
         # 2. 获取 boxes 对应的实体类别概率分布
         sub_probs = ent_probs[sub_boxes]  # (num_rels, 151) 主语的类别概率
         obj_probs = ent_probs[obj_boxes]  # (num_rels, 151) 宾语的类别概率
 
-        # 3. 剔除不在 l1_nodes 中的实体概率，这里有可能出现某行全 0 的情况【推断为空关系】，需要剔除
-        sub_probs = sub_probs * sub_mask.to(CUDA_DEVICE)
-        obj_probs = obj_probs * obj_mask.to(CUDA_DEVICE)
-
         # 初始化 normal_rel_mask 为全 1 张量
         normal_rel_mask = torch.ones(num_img_all_rels, dtype=torch.bool, device=CUDA_DEVICE)
-        
-        # 如果主语或宾语概率分布全为 0，则将对应的 mask 设为 0
-        sub_sum = torch.sum(sub_probs, dim=1)  # 每行主语概率之和
-        obj_sum = torch.sum(obj_probs, dim=1)  # 每行宾语概率之和
-        
-        # 找出主语或宾语概率和为 0 的行  TODO: 这里好像写的有点问题，normal_reL_mask 没筛掉东西
-        zero_mask = (sub_sum == 0) | (obj_sum == 0)
-        normal_rel_mask[zero_mask] = False
 
-        # 布尔切片切掉空关系
+        # 3. 剔除 <s,o> 对不存在的样本
+        count = 0
+        for i in range(num_img_all_rels):
+            s_max = torch.argmax(sub_probs[i]) # 拿到最大概率的实体索引
+            o_max = torch.argmax(obj_probs[i]) # 改进点：可以考虑 Top-K
+            if not self.fcg.has_sample(s_max, o_max):
+                normal_rel_mask[i] = False
+                count += 1
+
+        # 布尔切片
         sub_probs = sub_probs[normal_rel_mask, :]
         obj_probs = obj_probs[normal_rel_mask, :]
         triplet = triplet[normal_rel_mask, :]
         num_img_all_rels_filtered = triplet.size(0)
-
-        # 归一化概率
-        sub_probs = fn.normalize(sub_probs, p=1, dim=1)
-        obj_probs = fn.normalize(obj_probs, p=1, dim=1)
+        # print('filter out rels num in this batch: {}'.format(count))
 
         # 4. 建立桥边
-
         # 使用 VR 特征来作为三元组节点的特征，与 FCG 图一级节点建立桥边
         bridge_edges_tri_l1 = torch.zeros((num_img_all_rels_filtered, len(fcg_l1_nodes)), dtype=torch.float32, device=CUDA_DEVICE)
 
