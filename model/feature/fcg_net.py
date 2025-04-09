@@ -282,8 +282,8 @@ class FCGNet(Module):
         # 3. 剔除 <s,o> 对不存在的样本
         count = 0
         for i in range(num_img_all_rels):
-            s_max = torch.argmax(sub_probs[i]) # 拿到最大概率的实体索引
-            o_max = torch.argmax(obj_probs[i]) # 改进点：可以考虑 Top-K
+            s_max = torch.argmax(sub_probs[i]).item() # 拿到最大概率的实体索引
+            o_max = torch.argmax(obj_probs[i]).item() # 改进点：可以考虑 Top-K
             if not self.fcg.has_sample(s_max, o_max):
                 normal_rel_mask[i] = False
                 count += 1

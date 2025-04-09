@@ -1,4 +1,5 @@
 import pickle
+from typing import Dict, Any, List
 
 import numpy as np
 import torch
@@ -226,16 +227,16 @@ class FCGBuilder:
             raise ValueError(f"This don't have subnodes: {node}")
 
     @staticmethod
-    def add_node(key, key2nodes, node):
+    def add_node(key, key2nodes: Dict[Any, List[FCGNode]], node: FCGNode):
         if key not in key2nodes:
             key2nodes[key] = []
         key2nodes[key].append(node)
 
-    def has_sample(self, sub, obj):
+    def has_sample(self, sub: int, obj: int):
         nodes = self.get_sample(sub, obj)
         return len(nodes) > 0
 
-    def get_sample(self, sub, obj):
+    def get_sample(self, sub: int, obj: int):
         # 根据 s,o 获取 l3_nodes 节点列表
         so_key = (sub, obj)
         ret = []

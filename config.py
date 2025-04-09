@@ -69,7 +69,7 @@ def print_globals(module):
 # 日志打印
 IS_DEBUG = True
 logging.basicConfig(level=logging.DEBUG if IS_DEBUG else logging.INFO)
-logger = logging.getLogger()
+logger = logging.getLogger('hiker')
 logger.setLevel(logging.DEBUG if IS_DEBUG else logging.INFO)
 # =============================================================================
 # 各种文件路径
