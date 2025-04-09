@@ -1,4 +1,5 @@
 from apex.optimizers import FusedAdam, FusedSGD
+from config import logger
 
 
 # 优化器，用于执行梯度下降
@@ -6,7 +7,7 @@ def get_optim(model, conf):
 
     # 学习率的大小应该和 num_gpus、batch_size 数成比例关系
     real_lr = conf.lr * conf.num_gpus * conf.batch_size
-    print("real_lr: {}".format(real_lr))
+    logger.info("real_lr: {}".format(real_lr))
 
     # Lower the learning rate on the VGG fully connected layers by 1/10th.
     # It's a hack, but it helps stabilize the models.

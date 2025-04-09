@@ -180,8 +180,6 @@ class GGNN(Module):
             if self.normalize_eoa is True:
                 fn.normalize(self.ontological_preds, out=self.ontological_preds)
                 print(f'EOA-N: Used normalize_eoa')
-        else:
-            print(f'my_ggnn_10: not using use_ontological_adjustment. self.use_ontological_adjustment={self.use_ontological_adjustment}')
 
         # Init 阶段创建独属于 BPL 方法的 MLP 层以及加载混淆矩阵
         # 如果使用 BPL 方法，就会使用在这里初始化的 fc_output_proj_img_pred_clean 作为分类头，而不是 fc_output_proj_img_pred

@@ -1,13 +1,11 @@
-from operator import indexOf
-
-import numpy as np
 import torch
+import torch.nn.functional as fn
 from torch.cuda import current_device
 from torch.nn import Module, Linear
-import torch.nn.functional as fn
 
-from model.util import MLP
 from model.feature.fcg_builder import FCGBuilder
+from model.util import MLP
+from config import logger
 
 CUDA_DEVICE = torch.device(f'cuda:{current_device()}')
 
@@ -295,7 +293,7 @@ class FCGNet(Module):
         obj_probs = obj_probs[normal_rel_mask, :]
         triplet = triplet[normal_rel_mask, :]
         num_img_all_rels_filtered = triplet.size(0)
-        # print('filter out rels num in this batch: {}'.format(count))
+        logger.debug('rels num in this image | filter out: {}, left: {}'.format(count, num_img_all_rels_filtered))
 
         # 4. 建立桥边
         # 使用 VR 特征来作为三元组节点的特征，与 FCG 图一级节点建立桥边

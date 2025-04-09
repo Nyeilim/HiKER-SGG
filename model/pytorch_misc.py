@@ -19,6 +19,7 @@ from torch import tensor as torch_tensor, int64 as torch_int64, \
     Tensor as torch_Tensor, cat as torch_cat
 from torch.cuda import current_device
 from torch.nn import Module
+from config import logger
 
 
 write = tqdm.write
@@ -38,14 +39,14 @@ def optimistic_restore(network, state_dict, skip_clean=True):
                 continue
             own_state[name].copy_(param)
         else: # Size 对不上
-            print("Network has {} with size {}, ckpt has {}".format(name,
-                                                                    own_state[name].size(),
-                                                                    param.size()))
+            print("Network has {} with size {}, ckpt has {}".format(
+                name,own_state[name].size(),param.size())
+            )
             mismatch = True
 
     missing = set(own_state.keys()) - set(state_dict.keys())
     if len(missing) > 0:
-        print("We couldn't find {}".format(','.join(missing)))
+        logger.debug("We couldn't find {}".format(','.join(missing)))
         mismatch = True
     return not mismatch
 

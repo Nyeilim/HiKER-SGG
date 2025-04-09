@@ -2,6 +2,7 @@
 Configuration file!
 """
 import os
+import logging
 from argparse import ArgumentParser
 
 from munch import Munch
@@ -64,7 +65,11 @@ def print_globals(module):
         if not none_and_empty(value):
             print(f"{name}: {value}")
 
-
+# =============================================================================
+# 日志打印
+IS_DEBUG = False
+logging.basicConfig(level=logging.DEBUG if IS_DEBUG else logging.INFO)
+logger = logging.getLogger()
 # =============================================================================
 # 各种文件路径
 ## 标注元数据文件
@@ -92,7 +97,7 @@ FCG_METADATA = data_path('fcg_metadata.json')
 # 全局变量
 BPL_LIMIT = 1000 # BPL 单个谓词上限
 BPL_TOPK_NUM = 15 # BPL 头部谓词数
-DIS_PROGRESS_BAR = True  # 是否禁用进度条
+DIS_PROGRESS_BAR = not IS_DEBUG  # 是否禁用进度条
 ALPHA = 0.9 # 混淆矩阵更新权重
 MODES = ('sgdet', 'sgcls', 'predcls')
 DATALOADER_MODES = ('train', 'val', 'test', 'confusion_matrix_val')

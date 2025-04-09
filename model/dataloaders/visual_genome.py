@@ -483,10 +483,10 @@ def load_graphs(
 
     # 这里开始就是使用 BPL Method 的逻辑
     if with_clean_classifier:
-        print('Dataloader using BPL')
+        # print('Dataloader using BPL')
         root_classes = pred_topk # 类似 ['on', 'has', 'in' ... 'wears', 'standing on', 'in front of']，就是论文说的“头部谓词”
     else:
-        print('Dataloader NOT using BPL')
+        # print('Dataloader NOT using BPL')
         root_classes = None
 
     root_classes_count = {}
@@ -589,7 +589,8 @@ def load_graphs(
         relationships.append(rels)
 
     if with_clean_classifier and mode == 'train':
-        print("~~~~~~~BPL Filter Result~~~~~~")
+        print("~~~~~~~ BPL Filter Result ~~~~~~")
+        print('Dataloader using BPL')
         print("BPL Limit: {}, BPL TopK Num: {}".format(BPL_LIMIT, BPL_TOPK_NUM))
         print("BPL:non_rel_revise: {} @ {}".format(non_rel_revise, __name__))
         print("BPL:random_balanced_sample: {} @ {}".format(random_balanced_sample, __name__))
