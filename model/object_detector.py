@@ -16,7 +16,7 @@ from lib.fpn.proposal_assignments.proposal_assignments_det import proposal_assig
 
 from torchvision.ops import roi_align
 from model.pytorch_misc import enumerate_by_image, gather_nd
-from torchvision.models.vgg import vgg16
+from torchvision.models.vgg import vgg16, VGG16_Weights
 from torchvision.models.resnet import resnet101
 
 
@@ -644,7 +644,7 @@ def load_resnet():
 
 
 def load_vgg(use_dropout=True, use_relu=True, use_linear=True, pretrained=True):
-    model = vgg16(pretrained=pretrained)
+    model = vgg16(weights=VGG16_Weights.IMAGENET1K_V1 if pretrained else None)
     del model.features._modules['30']  # Get rid of the maxpool
     del model.classifier._modules['6']  # Get rid of class layer
     if not use_dropout:

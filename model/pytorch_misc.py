@@ -39,7 +39,7 @@ def optimistic_restore(network, state_dict, skip_clean=True):
                 continue
             own_state[name].copy_(param)
         else: # Size 对不上
-            print("Network has {} with size {}, ckpt has {}".format(
+            logger.debug("Network has {} with size {}, ckpt has {}".format(
                 name,own_state[name].size(),param.size())
             )
             mismatch = True

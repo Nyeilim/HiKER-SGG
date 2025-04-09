@@ -31,8 +31,6 @@ class FCGBuilder:
     """构建细粒度常识图(Finegrained Commonsense Graph)"""
 
     def __init__(self, hidden_dim):
-        print("Building FCG Net...")
-
         # 加载词嵌入和边统计矩阵
         with open(NODE_EMBEDDING, 'rb') as f:
             self.emb_ent, self.emb_pred = pickle.load(f)

@@ -67,9 +67,10 @@ def print_globals(module):
 
 # =============================================================================
 # 日志打印
-IS_DEBUG = False
+IS_DEBUG = True
 logging.basicConfig(level=logging.DEBUG if IS_DEBUG else logging.INFO)
 logger = logging.getLogger()
+logger.setLevel(logging.DEBUG if IS_DEBUG else logging.INFO)
 # =============================================================================
 # 各种文件路径
 ## 标注元数据文件
