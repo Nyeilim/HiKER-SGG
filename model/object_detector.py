@@ -225,7 +225,7 @@ class ObjectDetector(nn.Module):
         rois = torch.cat((im_inds.float()[:, None], gt_boxes), 1) # 使用 [im_inds, gt_box] 当作 rois
         if gt_rels is not None and self.training:
             # 以 gt_box 设置 rois 的回归目标和标签，扩充背景关系
-            logger.debug("origin rels of the batch before extended: {}".format(gt_rels.cpu().numpy()))
+            logger.debug("\norigin rels of the batch before extended:\n{}".format(gt_rels.cpu().numpy()))
             rois, labels, rel_labels = proposal_assignments_gtbox(
                 rois.data, gt_boxes.data, gt_classes.data, gt_rels.data, image_offset, self.add_bg_rels
             )
