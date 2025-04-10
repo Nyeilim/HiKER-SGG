@@ -226,45 +226,29 @@ class ObjectDetector(nn.Module):
         fcg_rel_mask = None
         if gt_rels is not None and self.training:
             # 以 gt_box 设置 rois 的回归目标和标签，扩充背景关系
+            # 在扩充背景关系后，进去的 gt_rels 和后面出来的 rel_labels 的 [:,2] [:,3] 代表的含义有所不同
+            # 例如，如果第一张图有5个框，第二张图有3个框，则第二张图中的第一个框在 gt_rels 中的索引是 0（局部索引）
+            # 而在 rel_labels 中的索引是 5（全局索引 = 第一张图框数 + 局部索引）
             logger.debug("\norigin rels of the batch before extended:\n{}".format(gt_rels.cpu().numpy()))
             rois, labels, rel_labels = proposal_assignments_gtbox(
                 rois.data, gt_boxes.data, gt_classes.data, gt_rels.data, image_offset, self.add_bg_rels
             )
-            fcg_rel_mask = self.nonrel_sample(gt_rels, rel_labels)
+            fcg_rel_mask = self.nonrel_sample(rel_labels)
         else:
             labels = gt_classes[:, 1]
             rel_labels = None
 
         return rois, labels, None, None, None, rel_labels, fcg_rel_mask
 
-    def nonrel_sample(self, gt_rels, rel_labels):
+    def nonrel_sample(self, rel_labels):
         # 在背景关系扩充后为 FCG 网络创建采样掩码，限制用于训练的关系数量
         
         # 首先创建一个全零掩码，形状与 rel_labels 相同
         fcg_rel_mask = torch.zeros(rel_labels.size(0), dtype=torch.bool, device=rel_labels.device)
-        
-        # 对于每个真实关系，在扩充后的关系中查找匹配项
-        gt_inds = []
-        for i in range(gt_rels.size(0)):
-            gt_rel = gt_rels[i]
-            if gt_rel[3] == -1:  # 跳过谓词为-1（冗余）的关系
-                continue
-                
-            # 在 rel_labels 中寻找匹配项
-            matches = ((rel_labels[:, 0] == gt_rel[0]) &  # 相同图像
-                       (rel_labels[:, 1] == gt_rel[1]) &  # 相同主体
-                       (rel_labels[:, 2] == gt_rel[2]) &  # 相同客体
-                       (rel_labels[:, 3] == gt_rel[3]))   # 相同谓词
-            
-            # 获取匹配的索引
-            match_idx = matches.nonzero().view(-1)
-            assert match_idx.size(0) == 1, "match_idx.size(0) = {}".format(match_idx.size(0))
-            gt_inds.append(match_idx[0])
-        
+
         # 将所有前景关系的掩码设为 True
-        if len(gt_inds) > 0:
-            gt_inds = torch.stack(gt_inds)
-            fcg_rel_mask[gt_inds] = True
+        fg_inds = torch.nonzero(rel_labels[:, 3]).view(-1)
+        fcg_rel_mask[fg_inds] = True
         
         # 找出所有背景关系
         bg_mask = (rel_labels[:, 3] == 0) & (~fcg_rel_mask)  # 谓词为 0 且不在前景关系中
@@ -282,7 +266,7 @@ class ObjectDetector(nn.Module):
             bg_inds_sampled = random_choose(bg_inds, num_bg_to_sample)
             fcg_rel_mask[bg_inds_sampled] = True
         
-        logger.debug("FCG 采样掩码创建完成；本批次总关系数 {}, 采样关系数 {}, 前景关系数 {}, 背景关系数 {}"
+        logger.debug("fcg_rel_mask created; batch total rels {}, sample rels {}, fg rels {}, bg rels {}"
                      .format(rel_labels.size(0), fcg_rel_mask.sum().item(), num_fg, num_bg_to_sample))
         
         return fcg_rel_mask

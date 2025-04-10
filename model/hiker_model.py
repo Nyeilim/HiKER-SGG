@@ -298,7 +298,8 @@ class HiKER(Module):
             vr=vr,
             rel_inds=rel_inds,
             obj_labels=result.rm_obj_labels if self.training or self.mode == 'predcls' else None,
-            boxes_per_cls=result.boxes_all # None
+            boxes_per_cls=result.boxes_all, # None
+            fcg_rel_mask=result.fcg_rel_mask
         )
 
         # 如果是训练，这里直接返回去算损失了；如果是测试/验证，会往下走算出具体的标签分布

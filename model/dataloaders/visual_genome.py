@@ -19,7 +19,7 @@ from torchvision.transforms import Resize, Compose, ToTensor, Normalize
 from pycocotools.coco import COCO
 from model.dataloaders.blob import Blob
 from config import VG_IMAGES, IM_DATA_FN, VG_SGG_FN, VG_SGG_DICT_FN, BOX_SCALE, IM_SCALE, PROPOSAL_FN, BPL_LIMIT, \
-    BPL_TOPK_NUM
+    BPL_TOPK_NUM, logger
 from model.dataloaders.image_transforms import SquarePad
 
 
@@ -595,9 +595,9 @@ def load_graphs(
         print("BPL:non_rel_revise: {} @ {}".format(non_rel_revise, __name__))
         print("BPL:random_balanced_sample: {} @ {}".format(random_balanced_sample, __name__))
         print("BPL:filter out images: {}".format(bpl_img_filter_out_count))
-        print("origin_pred_count = {}".format(all_classes_count))
-        print("root_pred_count = {}".format(root_classes_count))
-        print("leaf_pred_count = {}".format(leaf_classes_count))
+        logger.debug("origin_pred_count = {}".format(all_classes_count))
+        logger.debug("root_pred_count = {}".format(root_classes_count))
+        logger.debug("leaf_pred_count = {}".format(leaf_classes_count))
 
     return split_mask, boxes, gt_classes, relationships
 

@@ -12,9 +12,6 @@ METADATA_PATH = os.path.join('/root/VG_metadata')  # 斯坦福标注数据目录
 VG_IMAGES = os.path.join('/root/VG_100K')  # 数据集图片目录
 DATA_PATH = os.path.join('/output/data')  # 数据存储目录，大部分乱七八糟的文件都放在这
 
-# FCG 网络空关系采样比率，真实关系数量 * 比率 = 空关系数量
-FCG_NONREL_SAMPLE_RATIO = 1.0
-
 def none_and_empty(arg):
     if arg is None:  # None
         return True
@@ -70,7 +67,10 @@ def print_globals(module):
 # =============================================================================
 # 日志打印
 IS_DEBUG = True
-logging.basicConfig(level=logging.DEBUG if IS_DEBUG else logging.INFO)
+logging.basicConfig(
+    level=logging.DEBUG if IS_DEBUG else logging.INFO,
+    format='%(message)s'
+)
 logger = logging.getLogger('hiker')
 logger.setLevel(logging.DEBUG if IS_DEBUG else logging.INFO)
 # =============================================================================
@@ -104,6 +104,7 @@ DIS_PROGRESS_BAR = not IS_DEBUG  # 是否禁用进度条
 ALPHA = 0.9 # 混淆矩阵更新权重
 MODES = ('sgdet', 'sgcls', 'predcls')
 DATALOADER_MODES = ('train', 'val', 'test', 'confusion_matrix_val')
+FCG_NONREL_SAMPLE_RATIO = 1.0 # FCG 网络空关系采样比率，真实关系数量 * 比率 = 空关系数量
 
 # EOA code left, useless now
 MODEL = Munch()

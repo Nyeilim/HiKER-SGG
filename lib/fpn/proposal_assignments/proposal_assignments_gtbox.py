@@ -1,7 +1,7 @@
 from model.pytorch_misc import enumerate_by_image, random_choose
 import torch
 from model.pytorch_misc import diagonal_inds, to_variable
-from config import RELS_PER_IMG, REL_FG_FRACTION
+from config import RELS_PER_IMG, REL_FG_FRACTION, logger
 
 
 @to_variable
@@ -66,6 +66,8 @@ def postprocess_rels(im_inds, gt_boxes, gt_rels, image_offset, add_bg_rels):
 
     if not add_bg_rels:
         num_bg = 0
+
+    logger.debug('Nonrel extended: fg_rels: %d, bg_rels: %d' % (num_fg, num_bg))
 
     if num_bg > 0:
         bg_rels = torch.cat((
