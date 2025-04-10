@@ -5,7 +5,7 @@ from apex import amp
 from torch.cuda.amp import autocast
 from tqdm import tqdm
 
-from config import DIS_PROGRESS_BAR
+from config import DIS_PROGRESS_BAR, logger
 from model.pytorch_misc import clip_grad_norm
 
 
@@ -44,6 +44,8 @@ def train_epoch(model, conf, train_set, train_set_loader, epoch_num, optimizer):
 
 def train_batch(model, conf, batch, optimizer, verbose=False):
     optimizer.zero_grad()
+    
+    forward_start = time_time() # 前向传播计时开始
     with autocast():
         result = model[batch]
         loss_class = model.obj_loss(result) # refine_obj_cls 为 False 情况下默认返回 0
@@ -52,11 +54,19 @@ def train_batch(model, conf, batch, optimizer, verbose=False):
         loss_fcg = model.fcg_loss(result)
 
         loss = loss_class + loss_rel + loss_scpred + loss_fcg # 成本函数
+    forward_time = time_time() - forward_start
+    logger.debug(f"前向传播耗时: {forward_time:.4f}s")
+    
+    backward_start = time_time() # 反向传播计时开始
     with amp.scale_loss(loss, optimizer) as scaled_loss: # 损失缩放，混合精度
         scaled_loss.backward() # 启用反向传播，计算出各个参数的梯度
+    backward_time = time_time() - backward_start
+    logger.debug(f"反向传播耗时: {backward_time:.4f}s")
+
     clip_grad_norm([(n, p) for n, p in model.named_parameters() if p.grad is not None],  # 所有叶子节点，即 W、B
                    max_norm=conf.clip, verbose=verbose, clip=True) # 梯度裁剪，所有参数梯度 L2 范数的和不能超过 conf.clip
     optimizer.step() # 梯度下降，更新参数
+
     return result, {
         'loss_class': float(loss_class),
         'loss_rel': float(loss_rel),

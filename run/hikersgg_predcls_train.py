@@ -66,7 +66,7 @@ val_set, val_set_loader = provide_dataloader(conf, 'val')
 matrix_val_set, matrix_val_set_loader = provide_dataloader(conf, 'confusion_matrix_val')
 model = provide_model(conf, train_set.ind_to_classes, train_set.ind_to_predicates)
 optimizer = get_optim(model, conf)
-model, optimizer = amp.initialize(model, optimizer, opt_level="O0")
+model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
 conf_matrix_list = []
 matrices_list = []  # mean recall of each epoch
 nc_matrices_list = []  # mean recall without constraint of each epoch
