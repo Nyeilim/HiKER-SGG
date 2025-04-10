@@ -7,7 +7,7 @@ from torch.nn import functional as F
 from torch.nn.parallel import replicate, parallel_apply
 from torch.nn.parallel._functions import Gather
 
-from config import ANCHOR_SIZE, ANCHOR_RATIOS, ANCHOR_SCALES, logger
+from config import ANCHOR_SIZE, ANCHOR_RATIOS, ANCHOR_SCALES, logger, FCG_NONREL_SAMPLE_RATIO
 from lib.fpn.generate_anchors import generate_anchors
 from lib.fpn.box_utils import bbox_preds, center_size, bbox_overlaps
 from torchvision.ops import nms
@@ -30,7 +30,7 @@ class Result(object):
                  od_box_targets=None, rm_box_targets=None, od_box_priors=None, rm_box_priors=None,
                  boxes_assigned=None, boxes_all=None, od_obj_labels=None, rm_obj_labels=None,
                  rpn_scores=None, rpn_box_deltas=None, rel_labels=None,
-                 im_inds=None, fmap=None, rel_dists=None, rel_inds=None, rel_rep=None, fcg_pred_softmax=None):
+                 im_inds=None, fmap=None, rel_dists=None, rel_inds=None, rel_rep=None, fcg_pred_softmax=None, fcg_rel_mask=None):
         self.__dict__.update(locals())
         del self.__dict__['self']
 
@@ -223,17 +223,69 @@ class ObjectDetector(nn.Module):
         assert gt_boxes is not None
         im_inds = gt_classes[:, 0] - image_offset
         rois = torch.cat((im_inds.float()[:, None], gt_boxes), 1) # 使用 [im_inds, gt_box] 当作 rois
+        fcg_rel_mask = None
         if gt_rels is not None and self.training:
             # 以 gt_box 设置 rois 的回归目标和标签，扩充背景关系
             logger.debug("\norigin rels of the batch before extended:\n{}".format(gt_rels.cpu().numpy()))
             rois, labels, rel_labels = proposal_assignments_gtbox(
                 rois.data, gt_boxes.data, gt_classes.data, gt_rels.data, image_offset, self.add_bg_rels
             )
+            fcg_rel_mask = self.nonrel_sample(gt_rels, rel_labels)
         else:
             labels = gt_classes[:, 1]
             rel_labels = None
 
-        return rois, labels, None, None, None, rel_labels
+        return rois, labels, None, None, None, rel_labels, fcg_rel_mask
+
+    def nonrel_sample(self, gt_rels, rel_labels):
+        # 在背景关系扩充后为 FCG 网络创建采样掩码，限制用于训练的关系数量
+        
+        # 首先创建一个全零掩码，形状与 rel_labels 相同
+        fcg_rel_mask = torch.zeros(rel_labels.size(0), dtype=torch.bool, device=rel_labels.device)
+        
+        # 对于每个真实关系，在扩充后的关系中查找匹配项
+        gt_inds = []
+        for i in range(gt_rels.size(0)):
+            gt_rel = gt_rels[i]
+            if gt_rel[3] == -1:  # 跳过谓词为-1（冗余）的关系
+                continue
+                
+            # 在 rel_labels 中寻找匹配项
+            matches = ((rel_labels[:, 0] == gt_rel[0]) &  # 相同图像
+                       (rel_labels[:, 1] == gt_rel[1]) &  # 相同主体
+                       (rel_labels[:, 2] == gt_rel[2]) &  # 相同客体
+                       (rel_labels[:, 3] == gt_rel[3]))   # 相同谓词
+            
+            # 获取匹配的索引
+            match_idx = matches.nonzero().view(-1)
+            assert match_idx.size(0) == 1, "match_idx.size(0) = {}".format(match_idx.size(0))
+            gt_inds.append(match_idx[0])
+        
+        # 将所有前景关系的掩码设为 True
+        if len(gt_inds) > 0:
+            gt_inds = torch.stack(gt_inds)
+            fcg_rel_mask[gt_inds] = True
+        
+        # 找出所有背景关系
+        bg_mask = (rel_labels[:, 3] == 0) & (~fcg_rel_mask)  # 谓词为 0 且不在前景关系中
+        bg_inds = bg_mask.nonzero().view(-1)
+        
+        # 计算要采样的背景关系数量
+        # 背景关系数量 = 真实关系数量 * FCG_NONREL_SAMPLE_RATIO
+        num_fg = fcg_rel_mask.sum().item()
+        num_bg_to_sample = min(int(num_fg * FCG_NONREL_SAMPLE_RATIO), bg_inds.size(0))
+        
+        # 如果背景关系数量大于 0，随机采样一些背景关系
+        if num_bg_to_sample > 0 and bg_inds.size(0) > 0:
+            # 随机选择背景关系
+            from model.pytorch_misc import random_choose
+            bg_inds_sampled = random_choose(bg_inds, num_bg_to_sample)
+            fcg_rel_mask[bg_inds_sampled] = True
+        
+        logger.debug("FCG 采样掩码创建完成；本批次总关系数 {}, 采样关系数 {}, 前景关系数 {}, 背景关系数 {}"
+                     .format(rel_labels.size(0), fcg_rel_mask.sum().item(), num_fg, num_bg_to_sample))
+        
+        return fcg_rel_mask
 
     def proposal_boxes(self, fmap, im_sizes, image_offset, gt_boxes=None, gt_classes=None, gt_rels=None,
                        train_anchor_inds=None, proposals=None):
@@ -303,7 +355,7 @@ class ObjectDetector(nn.Module):
         fmap = self.feature_map(x)
         # import pdb; pdb.set_trace()
         # Get boxes from RPN. 由于我们设置 mode:gtbox，因此这里会直接把 gt_boxes 当作我们的 roi，实际上并没有过 RPN 层；rois.shape(num_gt_boxes, 5)
-        rois, obj_labels, bbox_targets, rpn_scores, rpn_box_deltas, rel_labels = self.get_boxes(
+        rois, obj_labels, bbox_targets, rpn_scores, rpn_box_deltas, rel_labels, fcg_rel_mask = self.get_boxes(
             fmap, im_sizes, image_offset, gt_boxes, gt_classes, gt_rels, train_anchor_inds, proposals=proposals
         )
 
@@ -372,6 +424,7 @@ class ObjectDetector(nn.Module):
             rel_labels=rel_labels, # 关系标签，里面包含了前景关系【即 gt_rels】以及超大量的背景关系，按图像索引、第一个对象索引和第二个对象索引排序。shape(num_all_rels, 4) [img_ind, sub, obj, pred]
             im_inds=im_inds, # 图片索引，表示每个 roi 来自这批次中的哪张图片
             fmap=fmap if return_fmap else None, # 仅通过特征提取网络后的特征映射，shape(batch_size, 512, 37, 37)
+            fcg_rel_mask=fcg_rel_mask, # FCG网络的关系采样掩码
         )
 
     def nms_boxes(self, obj_dists, rois, box_deltas, im_sizes):

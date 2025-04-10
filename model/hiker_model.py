@@ -65,7 +65,7 @@ class GGNNRelReason(Module):
         self.fcg_net = FCGNet()
 
     # 这个 forward 方法是 Module 抽象类里面待实现的 Callable 方法
-    def forward(self, im_inds, obj_fmaps, obj_logits, rel_inds, vr, obj_labels=None, boxes_per_cls=None):
+    def forward(self, im_inds, obj_fmaps, obj_logits, rel_inds, vr, obj_labels=None, boxes_per_cls=None, fcg_rel_mask=None):
         """
         Reason relationship classes using knowledge of object and relationship co-currency.
         入参的 obj_logits 就是前面的 obj_dist
@@ -86,7 +86,26 @@ class GGNNRelReason(Module):
         for (_, obj_s, obj_e), (_, rel_s, rel_e) in zip(enumerate_by_image(im_inds.data), enumerate_by_image(rel_inds[:,0])):
             # 调用 GGNN 内核，然后把前向传播的每个结果添加到前面的列表中。这里的返回值只有 rl scpred 有值
             rl, ol, scpred, scent = self.ggnn(rel_inds[rel_s:rel_e, 1:] - obj_s, obj_probs[obj_s:obj_e], obj_fmaps[obj_s:obj_e], vr[rel_s:rel_e]) # 实际上是每次前向传播，是处理一张图片的数据
-            fcg_pred_cls = self.fcg_net(rel_inds[rel_s:rel_e, 1:] - obj_s, obj_probs[obj_s:obj_e], vr[rel_s:rel_e]) # 调用 FCG 网络，生成谓词预测
+            
+            # 获取当前图像的关系掩码
+            if fcg_rel_mask is not None and self.training:
+                # 只将符合掩码的关系传给FCG网络
+                img_mask = fcg_rel_mask[rel_s:rel_e]
+                # 使用掩码过滤关系
+                filtered_rel_inds = rel_inds[rel_s:rel_e, 1:][img_mask] - obj_s
+                filtered_vr = vr[rel_s:rel_e][img_mask]
+                
+                # 调用FCG网络处理过滤后的关系
+                filtered_fcg_pred_cls = self.fcg_net(filtered_rel_inds, obj_probs[obj_s:obj_e], filtered_vr)
+                
+                # 构建完整大小的预测结果
+                full_fcg_pred_cls = torch.zeros((rel_e - rel_s, 51), dtype=torch.float32, device=CURRENT_DEVICE)
+                full_fcg_pred_cls[:, 0] = 1.0  # 默认背景关系
+                full_fcg_pred_cls[img_mask] = filtered_fcg_pred_cls
+                fcg_pred_cls = full_fcg_pred_cls
+            else:
+                # 测试时或不需要采样时正常处理
+                fcg_pred_cls = self.fcg_net(rel_inds[rel_s:rel_e, 1:] - obj_s, obj_probs[obj_s:obj_e], vr[rel_s:rel_e])
 
             rel_logits.append(rl)
             obj_logits_refined.append(ol)
