@@ -93,9 +93,8 @@ CONF_MAT_UPDATED = data_path('misc/conf_mat_updated.npy')  # 途中由混淆矩�
 EDGE_MATRIX = data_path('edge_matrix.npy')
 
 ## FCG
-FCG_NODES = data_path('fcg_nodes.pkl')
-FCG_EDGES = data_path('fcg_edges.pkl')  
-FCG_METADATA = data_path('fcg_metadata.json')
+FCG_FREQ_LIMIT = 5 # FCG 三级节点频率限制，超过这个频率的三元组不会构建三级节点
+FCG_NONREL_SAMPLE_RATIO = 1.0 # FCG 网络空关系采样比率，真实关系数量 * 比率 = 空关系数量
 # =============================================================================
 # 全局变量
 BPL_LIMIT = 1000 # BPL 单个谓词上限
@@ -104,7 +103,6 @@ DIS_PROGRESS_BAR = not IS_DEBUG  # 是否禁用进度条
 ALPHA = 0.9 # 混淆矩阵更新权重
 MODES = ('sgdet', 'sgcls', 'predcls')
 DATALOADER_MODES = ('train', 'val', 'test', 'confusion_matrix_val')
-FCG_NONREL_SAMPLE_RATIO = 1.0 # FCG 网络空关系采样比率，真实关系数量 * 比率 = 空关系数量
 
 # EOA code left, useless now
 MODEL = Munch()

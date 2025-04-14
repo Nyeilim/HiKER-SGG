@@ -4,7 +4,7 @@ from typing import Dict, Any, List
 import numpy as np
 import torch
 
-from config import NODE_EMBEDDING, EDGE_MATRIX
+from config import NODE_EMBEDDING, EDGE_MATRIX, FCG_FREQ_LIMIT
 
 
 class FCGNode:
@@ -75,7 +75,7 @@ class FCGBuilder:
             for o in range(151):
                 for p in range(51):
                     freq = self.edge_matrix[s, o, p]
-                    if freq > 0:
+                    if 0 < freq < FCG_FREQ_LIMIT:
                         # 计算节点特征
                         feat = torch.cat([
                             torch.tensor(self.emb_ent[s], dtype=torch.float32),
