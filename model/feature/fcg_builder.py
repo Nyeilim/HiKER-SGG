@@ -62,10 +62,14 @@ class FCGBuilder:
         self.edges_l2_l3 = None
         self.edges_l1_l2 = None
 
+        # 谓词中心，i 表示谓词索引，(1024,) 表示谓词中心向量
+        self.pred_center = {} # i -> (1024,)
+
         # 构建节点和边
         self.build_nodes()
         self.build_edges()
 
+        # 数据校验
         self.data_check()
 
     def build_nodes(self):
@@ -176,6 +180,22 @@ class FCGBuilder:
             node.idx = i
         for i, node in enumerate(self.l3_nodes):
             node.idx = i
+            
+        # 5. 构建谓词中心
+        # 按谓词索引收集L3节点
+        pred_nodes = {}  # pred_idx -> [nodes]
+        for node in self.l3_nodes:
+            pred_idx = node.pred
+            if pred_idx not in pred_nodes:
+                pred_nodes[pred_idx] = []
+            pred_nodes[pred_idx].append(node)
+            
+        # 计算每个谓词的中心特征
+        for pred_idx, nodes in pred_nodes.items():
+            if len(nodes) > 0:
+                # 计算该谓词下所有L3节点特征的平均值
+                pred_feat = sum(node.feat for node in nodes) / len(nodes)
+                self.pred_center[pred_idx] = pred_feat
 
     def build_edges(self):
         """构建层级之间的边连接"""

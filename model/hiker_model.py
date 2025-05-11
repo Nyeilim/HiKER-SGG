@@ -20,7 +20,7 @@ from model.object_detector import ObjectDetector, gather_res, load_vgg
 from model.pytorch_misc import onehot_logits, arange, enumerate_by_image, diagonal_inds, Flattener
 from model.resnet import resnet_l4
 from model.surgery import filter_dets
-from model.feature.fcg_net import FCGNet
+from model.feature.fcg_net import FCGNet, FCGNetV2
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -62,7 +62,7 @@ class GGNNRelReason(Module):
                          sa=sa, num_obj_cls=self.num_obj_cls, num_rel_cls=self.num_rel_cls)
 
         # FCG 网络
-        self.fcg_net = FCGNet()
+        self.fcg_net = FCGNetV2()
 
     # 这个 forward 方法是 Module 抽象类里面待实现的 Callable 方法
     def forward(self, im_inds, obj_fmaps, obj_logits, rel_inds, vr, obj_labels=None, boxes_per_cls=None, fcg_rel_mask=None):

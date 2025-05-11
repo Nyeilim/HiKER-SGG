@@ -3,9 +3,9 @@ import torch.nn.functional as fn
 from torch.cuda import current_device
 from torch.nn import Module, Linear
 
+from model.feature.fcg_helper import hierarchical_reasoning_fcg, pre_process, post_process
 from model.feature.fcg_builder import FCGBuilder
 from model.util import MLP
-from config import logger
 
 CUDA_DEVICE = torch.device(f'cuda:{current_device()}')
 
@@ -23,7 +23,7 @@ class FCGNet(Module):
         # 加载 FCG
         self.fcg = FCGBuilder(hidden_dim=hidden_dim)
 
-        # 初始化消息传递所需的 MLP 层
+        # 初始化消息传递所需的 MLP 层 @formatter:off
         self.mlp_send_l1_nodes = MLP([hidden_dim, hidden_dim // 2, hidden_dim // 4], act_fn='ReLU', last_act=True)
         self.mlp_send_l2_nodes = MLP([hidden_dim, hidden_dim // 2, hidden_dim // 4], act_fn='ReLU', last_act=True)
         self.mlp_send_l3_nodes = MLP([hidden_dim, hidden_dim // 2, hidden_dim // 4], act_fn='ReLU', last_act=True)
@@ -32,6 +32,7 @@ class FCGNet(Module):
         self.mlp_rcv_l2_nodes = MLP([2 * hidden_dim // 4, 2 * hidden_dim // 4, hidden_dim], act_fn='ReLU', last_act=True)
         self.mlp_rcv_l3_nodes = MLP([hidden_dim // 4, hidden_dim // 2, hidden_dim], act_fn='ReLU', last_act=True)
         self.mlp_rcv_triplet = MLP([hidden_dim // 4, hidden_dim // 2, hidden_dim], act_fn='ReLU', last_act=True)
+        # @formatter:on
 
         # 初始化 GRU 规则所需的线性层，eq3/4/5 代表 GRU 论文中的三条核心等式，w/u 作用于输入/隐状态的权重
         ## l1
@@ -91,7 +92,7 @@ class FCGNet(Module):
         fcg_edges_l2_l1 = fcg_edges_l1_l2.t()
 
         # 预处理
-        bridge_edges_tri_l1, normal_rel_mask, triplet = self.pre_process(rel_inds, ent_probs, triplet)
+        bridge_edges_tri_l1, normal_rel_mask, triplet = pre_process(self.fcg, rel_inds, ent_probs, triplet)
         bridge_edges_l1_tri = bridge_edges_tri_l1.t()
 
         for t in range(self.time_step_num):
@@ -151,167 +152,106 @@ class FCGNet(Module):
             fcg_l2_feats = self.fc_fcg_logits(fcg_l2_feats)
             fcg_l3_feats = self.fc_fcg_logits(fcg_l3_feats)
 
-        pred_cls_score = self.hierarchical_reasoning_fcg(bridge_edges_tri_l1, triplet, fcg_l2_feats, fcg_l3_feats)
-        pred_cls_score = self.post_process(pred_cls_score, normal_rel_mask)
+        pred_cls_score = hierarchical_reasoning_fcg(self.fcg, bridge_edges_tri_l1, triplet, fcg_l2_feats, fcg_l3_feats)
+        pred_cls_score = post_process(pred_cls_score, normal_rel_mask)
 
         return pred_cls_score
 
-    def hierarchical_reasoning_fcg(self, bridge_edges_tri_l1, triplet, fcg_l2_feats, fcg_l3_feats):
 
-        assert bridge_edges_tri_l1.size(0) == triplet.size(0)
-        num_img_all_rels = bridge_edges_tri_l1.size(0)
-        num_l2_nodes = fcg_l2_feats.size(0)
-        num_l3_nodes = fcg_l3_feats.size(0)
+class FCGNetV2(Module):
+    """
+    基于细粒度知识图(FCG)的场景图生成网络 V2 版本
+    使用交叉注意力机制对齐特征，而不是通过消息传递更新FCG节点
+    """
 
-        # 构筑 l1->l2 l1->l3 l2->l3 的子节点层级下标映射
-        l1_l3_idx_map_sub = {}
-        l1_l3_idx_map_obj = {}
-        l1_l2_idx_map = {}
-        l2_l3_idx_map = {}
+    def __init__(self, hidden_dim=1024):
+        super(FCGNetV2, self).__init__()
+        self.hidden_dim = hidden_dim
 
-        for l1_node in self.fcg.l1_nodes:
-            l2_subnodes = self.fcg.find_subnode(l1_node)
-            l2_subnodes_idx = [l2_node.idx for l2_node in l2_subnodes]
-            l1_l2_idx_map[l1_node.idx] = l2_subnodes_idx
+        # 加载 FCG
+        self.fcg = FCGBuilder(hidden_dim=hidden_dim)
 
-            l3_subnodes = []
-            for l2_node in l2_subnodes:
-                l3_subnodes.extend(self.fcg.find_subnode(l2_node))
-            l3_subnodes_idx = [l3_node.idx for l3_node in l3_subnodes]
+        # 交叉注意力机制相关层 - 只保留一个用于谓词中心的交叉注意力
+        # 查询/键/值投影层
+        self.q_proj = Linear(hidden_dim, hidden_dim)
+        self.k_proj = Linear(hidden_dim, hidden_dim)
+        self.v_proj = Linear(hidden_dim, hidden_dim)
 
-            if l1_node.sub is not None:
-                l1_l3_idx_map_sub[l1_node.idx] = l3_subnodes_idx
-            if l1_node.obj is not None:
-                l1_l3_idx_map_obj[l1_node.idx] = l3_subnodes_idx
+        # 多头注意力后的线性层
+        self.linear = Linear(hidden_dim, hidden_dim)
 
-        for l2_node in self.fcg.l2_nodes:
-            l3_subnodes = self.fcg.find_subnode(l2_node)
-            l3_subnodes_idx = [l3_node.idx for l3_node in l3_subnodes]
-            l2_l3_idx_map[l2_node.idx] = l3_subnodes_idx
+        # 层归一化
+        self.norm1 = torch.nn.LayerNorm(hidden_dim)
+        self.norm2 = torch.nn.LayerNorm(hidden_dim)
 
-        l2_hier_prob_logit = torch.mm(triplet, fcg_l2_feats.t())
-        l3_hier_prob_logit = torch.mm(triplet, fcg_l3_feats.t())
+        # 前馈网络
+        self.ffn = MLP([hidden_dim, hidden_dim * 2, hidden_dim], act_fn='ReLU', last_act=False)
 
-        # 计算 l2/l3 的层次（条件）概率
-        l1_hier_prob = bridge_edges_tri_l1
-        l2_hier_prob = torch.zeros((num_img_all_rels, num_l2_nodes), dtype=torch.float32, device=CUDA_DEVICE)
-        l3_hier_prob = torch.zeros((num_img_all_rels, num_l3_nodes), dtype=torch.float32, device=CUDA_DEVICE)
-
-        for l1_idx, l2_subnodes_idx in l1_l2_idx_map.items():
-            l2_hier_prob[:, l2_subnodes_idx] = fn.softmax(l2_hier_prob_logit[:, l2_subnodes_idx], dim=1, dtype=torch.float32)
-
-        for l2_idx, l3_subnodes_idx in l2_l3_idx_map.items():
-            l3_hier_prob[:, l3_subnodes_idx] = fn.softmax(l3_hier_prob_logit[:, l3_subnodes_idx], dim=1, dtype=torch.float32)
-
-        # 填充计算矩阵，三个计算矩阵的尺寸为 (num_img_all_rels, num_l3_nodes)，将三个矩阵作逐元素累乘，即为分类到 l3 某节点的最终概率
-        l1_hier_cpt_matrix_sub = torch.zeros((num_img_all_rels, num_l3_nodes), dtype=torch.float32, device=CUDA_DEVICE)
-        l1_hier_cpt_matrix_obj = torch.zeros((num_img_all_rels, num_l3_nodes), dtype=torch.float32, device=CUDA_DEVICE)
-        l2_hier_cpt_matrix = torch.zeros((num_img_all_rels, num_l3_nodes), dtype=torch.float32, device=CUDA_DEVICE)
-        l3_hier_cpt_matrix = l3_hier_prob
-
-        # 值得注意，对于某个 l3 节点，从 l1 节点出发会有来自 sub/obj 的两条路径，因此需要将两条路径的概率相加
-        # 在处理上，需要将 l1_hier_cpt_matrix 拆分为两个矩阵，避免 l3_subnodes_idx 上的值被重复覆盖
-        for l1_idx, l3_subnodes_idx in l1_l3_idx_map_sub.items():
-            l1_hier_cpt_matrix_sub[:, l3_subnodes_idx] = l1_hier_prob[:, l1_idx].unsqueeze(1)
-
-        for l1_idx, l3_subnodes_idx in l1_l3_idx_map_obj.items():
-            l1_hier_cpt_matrix_obj[:, l3_subnodes_idx] = l1_hier_prob[:, l1_idx].unsqueeze(1)
-
-        for l2_idx, l3_subnodes_idx in l2_l3_idx_map.items():
-            l2_hier_cpt_matrix[:, l3_subnodes_idx] = l2_hier_prob[:, l2_idx].unsqueeze(1)
-
-        total_cls_prob = (l1_hier_cpt_matrix_sub * l2_hier_cpt_matrix * l3_hier_cpt_matrix) + (
-                    l1_hier_cpt_matrix_obj * l2_hier_cpt_matrix * l3_hier_cpt_matrix)
-
-        # 合并三元组概率，反映射回谓词概率
-        pred_cls_prob = torch.zeros((num_img_all_rels, 51), dtype=torch.float32, device=CUDA_DEVICE)
-        for i, l3_node in enumerate(self.fcg.l3_nodes):
-            pred_cls_prob[:, l3_node.pred] += total_cls_prob[:, i]
-
-        return pred_cls_prob
-
-    def post_process(self, pred_cls_score, normal_rel_mask):
+    def cross_attention(self, q_proj, k_proj, v_proj, linear, norm1, norm2, ffn, x, context):
         """
-        后处理函数，将 pred_cls_score 扩充到原来的大小
+        交叉注意力机制
+        :param q_proj: 查询投影层
+        :param k_proj: 键投影层
+        :param v_proj: 值投影层
+        :param linear: 线性层
+        :param norm1: 第一个层归一化
+        :param norm2: 第二个层归一化
+        :param ffn: 前馈网络
+        :param x: 输入特征
+        :param context: 上下文特征
+        :return: 经过注意力机制处理后的特征
         """
-        # 创建一个全零矩阵，大小为 (normal_rel_mask.size(0), 51)
-        expanded_pred_cls_score = torch.zeros((normal_rel_mask.size(0), 51), dtype=torch.float32, device=CUDA_DEVICE)
-        # 将第一列(0号列)全部设为1
-        expanded_pred_cls_score[:, 0] = 1
-        # 将原始的 pred_cls_score 填充到对应位置
-        expanded_pred_cls_score[normal_rel_mask] = pred_cls_score
-        # 更新 pred_cls_score
-        pred_cls_score = expanded_pred_cls_score
-        
+        # 多头注意力
+        q = q_proj(x)
+        k = k_proj(context)
+        v = v_proj(context)
+
+        # 计算注意力分数
+        attn_scores = torch.matmul(q, k.transpose(-2, -1)) / (self.hidden_dim ** 0.5)
+        attn_weights = fn.softmax(attn_scores, dim=-1)
+
+        # 应用注意力权重
+        attn_output = torch.matmul(attn_weights, v)
+        attn_output = linear(attn_output)
+
+        # 残差连接和层归一化
+        x = norm1(x + attn_output)
+
+        # 前馈网络
+        ffn_output = ffn(x)
+
+        # 残差连接和层归一化
+        x = norm2(x + ffn_output)
+
+        return x
+
+    def forward(self, rel_inds, ent_probs, vr):
+        """
+        FCGNetV2 的前向传播
+        :param rel_inds: shape(img_all_rels,2) <s,o> 二元组
+        :param ent_probs: shape(img_gt_boxes,151) boxes 的类别概率分布
+        :param vr: shape(img_all_rels,1024) 关系的视觉特征
+        :return: pred_cls_score: 谓词的预测概率
+        """
+        # 复制 FCG 节点特征（静态特征，不会被更新）
+        fcg_l2_feats = torch.stack([node.feat for node in self.fcg.l2_nodes]).to(CUDA_DEVICE)
+        fcg_l3_feats = torch.stack([node.feat for node in self.fcg.l3_nodes]).to(CUDA_DEVICE)
+
+        # 构建谓词中心特征张量
+        pred_centers = torch.stack(list(self.fcg.pred_center.values())).to(CUDA_DEVICE)
+
+        # 预处理
+        bridge_edges_tri_l1, normal_rel_mask, triplet = pre_process(self.fcg, rel_inds, ent_probs, vr)
+
+        # 使用交叉注意力机制与谓词中心对齐特征
+        aligned_triplet = self.cross_attention(
+            self.q_proj, self.k_proj, self.v_proj,
+            self.linear, self.norm1, self.norm2, self.ffn,
+            triplet, pred_centers
+        )
+
+        # 使用对齐后的特征进行层级推理 @formatter:off
+        pred_cls_score = hierarchical_reasoning_fcg(self.fcg, bridge_edges_tri_l1, aligned_triplet, fcg_l2_feats, fcg_l3_feats)
+        pred_cls_score = post_process(pred_cls_score, normal_rel_mask)
+
         return pred_cls_score
-
-    def pre_process(self, rel_inds, ent_probs, triplet):
-        """
-        预处理函数
-        1. 构建 ent_idx -> l1_node.idx 的映射
-        2. 剔除没在训练集中出现的关系
-        3. 返回 bridge_edges_tri_l1, normal_rel_mask, triplet
-        """
-        num_img_all_rels = triplet.size(0)
-        
-        # 数据集中 idx 映射到数组中 idx
-        fcg_l1_nodes = self.fcg.l1_nodes
-        l1_nodes_sub_idx_map = {} # ent_idx -> l1_node.idx
-        l1_nodes_obj_idx_map = {} # ent_idx -> l1_node.idx
-        for i, node in enumerate(fcg_l1_nodes):
-            if node.sub is not None:  # <sub,x,x>
-                l1_nodes_sub_idx_map[node.sub] = i
-            if node.obj is not None:  # <x,x,obj>
-                l1_nodes_obj_idx_map[node.obj] = i
-        # sub_mask = torch.zeros((151,))
-        # sub_mask[list(l1_nodes_sub_idx_map.keys())] = 1
-        # obj_mask = torch.zeros((151,))
-        # obj_mask[list(l1_nodes_obj_idx_map.keys())] = 1
-
-        # 1. 根据 rel_inds 找到关系对应的 gt_boxes
-        sub_boxes = rel_inds[:, 0]  # 主语对应的 box 索引
-        obj_boxes = rel_inds[:, 1]  # 宾语对应的 box 索引
-
-        # 2. 获取 boxes 对应的实体类别概率分布
-        sub_probs = ent_probs[sub_boxes]  # (num_rels, 151) 主语的类别概率
-        obj_probs = ent_probs[obj_boxes]  # (num_rels, 151) 宾语的类别概率
-
-        # 初始化 normal_rel_mask 为全 1 张量
-        normal_rel_mask = torch.ones(num_img_all_rels, dtype=torch.bool, device=CUDA_DEVICE)
-
-        # 3. 剔除 <s,o> 对不存在的样本
-        count = 0
-        for i in range(num_img_all_rels):
-            s_max = torch.argmax(sub_probs[i]).item() # 拿到最大概率的实体索引
-            o_max = torch.argmax(obj_probs[i]).item() # 改进点：可以考虑 Top-K
-            if not self.fcg.has_sample(s_max, o_max):
-                normal_rel_mask[i] = False
-                count += 1
-
-        # 布尔切片
-        sub_probs = sub_probs[normal_rel_mask, :]
-        obj_probs = obj_probs[normal_rel_mask, :]
-        triplet = triplet[normal_rel_mask, :]
-        num_img_all_rels_filtered = triplet.size(0)
-        logger.debug('rels num in this image | filter out: {}, left: {}'.format(count, num_img_all_rels_filtered))
-
-        # 4. 建立桥边
-        # 使用 VR 特征来作为三元组节点的特征，与 FCG 图一级节点建立桥边
-        bridge_edges_tri_l1 = torch.zeros((num_img_all_rels_filtered, len(fcg_l1_nodes)), dtype=torch.float32, device=CUDA_DEVICE)
-
-        # 对于每个关系,将主语概率分配给对应的主语模式一级节点
-        for i in range(num_img_all_rels_filtered):
-            for ent_idx, prob in enumerate(sub_probs[i]):
-                if prob > 0 and ent_idx in l1_nodes_sub_idx_map:
-                    bridge_edges_tri_l1[i][l1_nodes_sub_idx_map[ent_idx]] = prob
-
-            # 将宾语概率分配给对应的宾语模式一级节点
-            for ent_idx, prob in enumerate(obj_probs[i]):
-                if prob > 0 and ent_idx in l1_nodes_obj_idx_map:
-                    bridge_edges_tri_l1[i][l1_nodes_obj_idx_map[ent_idx]] = prob
-
-        # 归一化桥边权重，使每个关系的总权重为 1；这边的主宾语权重融合可以做考虑，现在是 1/2 的情况
-        # 可以考虑看分布的最大概率，如果主语的最大概率高于宾语，那么预测分支应该更加偏向于主语分支
-        bridge_edges_tri_l1 = fn.normalize(bridge_edges_tri_l1, p=1, dim=1)
-
-        return bridge_edges_tri_l1, normal_rel_mask, triplet
