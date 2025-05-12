@@ -5,7 +5,7 @@ from apex import amp
 from torch.cuda.amp import autocast
 from tqdm import tqdm
 
-from config import DIS_PROGRESS_BAR, logger
+from config import DIS_PROGRESS_BAR, logger, USE_FCG
 from model.pytorch_misc import clip_grad_norm
 
 
@@ -51,9 +51,12 @@ def train_batch(model, conf, batch, optimizer, verbose=False):
         loss_class = model.obj_loss(result) # refine_obj_cls 为 False 情况下默认返回 0
         loss_rel = model.rel_loss(result)
         loss_scpred = model.scpred_loss(result)
-        loss_fcg = model.fcg_loss(result)
 
-        loss = loss_class + loss_rel + loss_scpred + loss_fcg # 成本函数
+        loss = loss_class + loss_rel + loss_scpred # 成本函数
+
+        if USE_FCG:
+            loss_fcg = model.fcg_loss(result)
+            loss += loss_fcg
     forward_time = time_time() - forward_start
     logger.debug(f"前向传播耗时: {forward_time:.4f}s")
     

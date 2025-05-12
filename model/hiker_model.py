@@ -21,6 +21,7 @@ from model.pytorch_misc import onehot_logits, arange, enumerate_by_image, diagon
 from model.resnet import resnet_l4
 from model.surgery import filter_dets
 from model.feature.fcg_net import FCGNet, FCGNetV2
+from config import USE_FCG
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -88,30 +89,33 @@ class GGNNRelReason(Module):
             rl, ol, scpred, scent = self.ggnn(rel_inds[rel_s:rel_e, 1:] - obj_s, obj_probs[obj_s:obj_e], obj_fmaps[obj_s:obj_e], vr[rel_s:rel_e]) # 实际上是每次前向传播，是处理一张图片的数据
             
             # 获取当前图像的关系掩码
-            if fcg_rel_mask is not None and self.training:
-                # 只将符合掩码的关系传给FCG网络
-                img_mask = fcg_rel_mask[rel_s:rel_e]
-                # 使用掩码过滤关系
-                filtered_rel_inds = rel_inds[rel_s:rel_e, 1:][img_mask] - obj_s
-                filtered_vr = vr[rel_s:rel_e][img_mask]
-                
-                # 调用FCG网络处理过滤后的关系
-                filtered_fcg_pred_cls = self.fcg_net(filtered_rel_inds, obj_probs[obj_s:obj_e], filtered_vr)
-                
-                # 构建完整大小的预测结果
-                full_fcg_pred_cls = torch.zeros((rel_e - rel_s, 51), dtype=torch.float32, device=CURRENT_DEVICE)
-                full_fcg_pred_cls[:, 0] = 1.0  # 默认背景关系
-                full_fcg_pred_cls[img_mask] = filtered_fcg_pred_cls
-                fcg_pred_cls = full_fcg_pred_cls
-            else:
-                # 测试时或不需要采样时正常处理
-                fcg_pred_cls = self.fcg_net(rel_inds[rel_s:rel_e, 1:] - obj_s, obj_probs[obj_s:obj_e], vr[rel_s:rel_e])
+            if USE_FCG:
+                if fcg_rel_mask is not None and self.training:
+                    # 只将符合掩码的关系传给FCG网络
+                    img_mask = fcg_rel_mask[rel_s:rel_e]
+                    # 使用掩码过滤关系
+                    filtered_rel_inds = rel_inds[rel_s:rel_e, 1:][img_mask] - obj_s
+                    filtered_vr = vr[rel_s:rel_e][img_mask]
+
+                    # 调用FCG网络处理过滤后的关系
+                    filtered_fcg_pred_cls = self.fcg_net(filtered_rel_inds, obj_probs[obj_s:obj_e], filtered_vr)
+
+                    # 构建完整大小的预测结果
+                    full_fcg_pred_cls = torch.zeros((rel_e - rel_s, 51), dtype=torch.float32, device=CURRENT_DEVICE)
+                    full_fcg_pred_cls[:, 0] = 1.0  # 默认背景关系
+                    full_fcg_pred_cls[img_mask] = filtered_fcg_pred_cls
+                    fcg_pred_cls = full_fcg_pred_cls
+                    fcg_pred_softmax.append(fcg_pred_cls)
+                else:
+                    # 测试时或不需要采样时正常处理
+                    fcg_pred_cls = self.fcg_net(rel_inds[rel_s:rel_e, 1:] - obj_s, obj_probs[obj_s:obj_e],
+                                                vr[rel_s:rel_e])
+                    fcg_pred_softmax.append(fcg_pred_cls)
 
             rel_logits.append(rl)
             obj_logits_refined.append(ol)
             scpred_softmax.append(scpred)
             scent_softmax.append(scent)
-            fcg_pred_softmax.append(fcg_pred_cls)
 
         # 列表转二维 tensor
         rel_logits = torch_cat(rel_logits, 0) # shape(all_rels, 51)

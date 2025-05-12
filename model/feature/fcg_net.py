@@ -171,6 +171,13 @@ class FCGNetV2(Module):
         # 加载 FCG
         self.fcg = FCGBuilder(hidden_dim=hidden_dim)
 
+        # 复制 FCG 节点特征（静态特征，不会被更新）
+        self.fcg_l2_feats = torch.stack([node.feat for node in self.fcg.l2_nodes]).to(CUDA_DEVICE)
+        self.fcg_l3_feats = torch.stack([node.feat for node in self.fcg.l3_nodes]).to(CUDA_DEVICE)
+
+        # 构建谓词中心特征张量
+        self.pred_centers = torch.stack(list(self.fcg.pred_center.values())).to(CUDA_DEVICE)
+
         # 交叉注意力机制相关层 - 只保留一个用于谓词中心的交叉注意力
         # 查询/键/值投影层
         self.q_proj = Linear(hidden_dim, hidden_dim)
@@ -233,12 +240,6 @@ class FCGNetV2(Module):
         :param vr: shape(img_all_rels,1024) 关系的视觉特征
         :return: pred_cls_score: 谓词的预测概率
         """
-        # 复制 FCG 节点特征（静态特征，不会被更新）
-        fcg_l2_feats = torch.stack([node.feat for node in self.fcg.l2_nodes]).to(CUDA_DEVICE)
-        fcg_l3_feats = torch.stack([node.feat for node in self.fcg.l3_nodes]).to(CUDA_DEVICE)
-
-        # 构建谓词中心特征张量
-        pred_centers = torch.stack(list(self.fcg.pred_center.values())).to(CUDA_DEVICE)
 
         # 预处理
         bridge_edges_tri_l1, normal_rel_mask, triplet = pre_process(self.fcg, rel_inds, ent_probs, vr)
@@ -247,11 +248,11 @@ class FCGNetV2(Module):
         aligned_triplet = self.cross_attention(
             self.q_proj, self.k_proj, self.v_proj,
             self.linear, self.norm1, self.norm2, self.ffn,
-            triplet, pred_centers
+            triplet, self.pred_centers
         )
 
         # 使用对齐后的特征进行层级推理 @formatter:off
-        pred_cls_score = hierarchical_reasoning_fcg(self.fcg, bridge_edges_tri_l1, aligned_triplet, fcg_l2_feats, fcg_l3_feats)
+        pred_cls_score = hierarchical_reasoning_fcg(self.fcg, bridge_edges_tri_l1, aligned_triplet, self.fcg_l2_feats, self.fcg_l3_feats)
         pred_cls_score = post_process(pred_cls_score, normal_rel_mask)
 
         return pred_cls_score
