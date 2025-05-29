@@ -22,6 +22,7 @@ def post_process(pred_cls_score, normal_rel_mask):
 
     return pred_cls_score
 
+
 def hierarchical_reasoning_fcg(fcg: FCGBuilder, bridge_edges_tri_l1, triplet, fcg_l2_feats, fcg_l3_feats):
 
     assert bridge_edges_tri_l1.size(0) == triplet.size(0)
@@ -97,6 +98,23 @@ def hierarchical_reasoning_fcg(fcg: FCGBuilder, bridge_edges_tri_l1, triplet, fc
         pred_cls_prob[:, l3_node.pred] += total_cls_prob[:, i]
 
     return pred_cls_prob
+
+
+def pred_center_reasoning(pred_center, triplet):
+    """
+    比较 pred_center 和 triplet 之间的相似度，并返回分类结果
+    :param pred_center: 形状为(num_pred_centers, hidden_dim) 的谓词中心特征
+    :param triplet: 形状为(num_relations, hidden_dim) 的三元组特征
+    :return: pred_cls_prob: 形状为(num_relations, num_pred_centers) 的分类概率
+    """
+    # 计算相似度矩阵
+    similarity_matrix = torch.matmul(triplet, pred_center.t())  # 形状为(num_relations, num_pred_centers)
+
+    # 应用 softmax 获取概率分布
+    pred_cls_prob = fn.softmax(similarity_matrix, dim=1)
+
+    return pred_cls_prob
+
 
 def pre_process(fcg: FCGBuilder, rel_inds, ent_probs, triplet):
     """
