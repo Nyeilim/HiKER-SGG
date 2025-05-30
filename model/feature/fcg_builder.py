@@ -40,6 +40,7 @@ class FCGBuilder:
         # 初始化正交投影矩阵，构建映射 900->1024
         input_dim = self.emb_ent.shape[1] * 2 + self.emb_pred.shape[1]
         output_dim = hidden_dim
+        self.hidden_dim = hidden_dim
         M, _ = torch.linalg.qr(torch.randn(output_dim, input_dim))  # 生成正交基
         self.proj_matrix = M.T * np.sqrt(output_dim / input_dim)  # 缩放保持方差
         self.proj_matrix.requires_grad_(False)  # 禁用梯度
@@ -190,7 +191,8 @@ class FCGBuilder:
                 pred_nodes[pred_idx] = []
             pred_nodes[pred_idx].append(node)
             
-        # 计算每个谓词的中心特征
+        # 计算每个谓词的中心特征，以全 0 向量作为空关系的谓词中心
+        self.pred_center[0] = torch.zeros(self.hidden_dim)
         for pred_idx, nodes in pred_nodes.items():
             if len(nodes) > 0:
                 # 计算该谓词下所有L3节点特征的平均值

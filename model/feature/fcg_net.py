@@ -175,8 +175,9 @@ class FCGNetV2(Module):
         self.fcg_l2_feats = torch.stack([node.feat for node in self.fcg.l2_nodes]).to(CUDA_DEVICE)
         self.fcg_l3_feats = torch.stack([node.feat for node in self.fcg.l3_nodes]).to(CUDA_DEVICE)
 
-        # 构建谓词中心特征张量
-        self.pred_centers = torch.stack(list(self.fcg.pred_center.values())).to(CUDA_DEVICE)
+        # 构建谓词中心特征张量，按照 key 从小到大排序后转换为 list
+        sorted_pred_centers = [self.fcg.pred_center[k] for k in sorted(self.fcg.pred_center.keys())]
+        self.pred_centers = torch.stack(sorted_pred_centers).to(CUDA_DEVICE)
 
         # 交叉注意力机制相关层 - 只保留一个用于谓词中心的交叉注意力
         # 查询/键/值投影层
