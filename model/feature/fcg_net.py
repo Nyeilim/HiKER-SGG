@@ -253,7 +253,7 @@ class FCGNetV2(Module):
 
         # 使用对齐后的特征进行层级推理 @formatter:off
         # pred_cls_score = hierarchical_reasoning_fcg(self.fcg, bridge_edges_tri_l1, aligned_triplet, self.fcg_l2_feats, self.fcg_l3_feats)
-        pred_cls_score = pred_center_reasoning(self.pred_centers, triplet)
+        pred_cls_score = pred_center_reasoning(self.pred_centers, aligned_triplet)
         pred_cls_score = post_process(pred_cls_score, normal_rel_mask)
 
         return pred_cls_score

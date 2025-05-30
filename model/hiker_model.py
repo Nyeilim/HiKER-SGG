@@ -120,7 +120,8 @@ class GGNNRelReason(Module):
         # 列表转二维 tensor
         rel_logits = torch_cat(rel_logits, 0) # shape(all_rels, 51)
         scpred_softmax = torch_cat(scpred_softmax, 0) # shape(all_rels, 18)
-        fcg_pred_softmax = torch_cat(fcg_pred_softmax, 0) # shape(all_rels, 51)
+        if USE_FCG:
+            fcg_pred_softmax = torch_cat(fcg_pred_softmax, 0) # shape(all_rels, 51)
 
         if self.ggnn.refine_obj_cls: # False
             obj_logits_refined = torch_cat(obj_logits_refined, 0)

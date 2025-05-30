@@ -54,6 +54,7 @@ def train_batch(model, conf, batch, optimizer, verbose=False):
 
         loss = loss_class + loss_rel + loss_scpred # 成本函数
 
+        loss_fcg = 0
         if USE_FCG:
             loss_fcg = model.fcg_loss(result)
             loss += loss_fcg
