@@ -229,7 +229,7 @@ class ObjectDetector(nn.Module):
             # 在扩充背景关系后，进去的 gt_rels 和后面出来的 rel_labels 的 [:,2] [:,3] 代表的含义有所不同
             # 例如，如果第一张图有5个框，第二张图有3个框，则第二张图中的第一个框在 gt_rels 中的索引是 0（局部索引）
             # 而在 rel_labels 中的索引是 5（全局索引 = 第一张图框数 + 局部索引）
-            logger.debug("\norigin rels of the batch before extended:\n{}".format(gt_rels.cpu().numpy()))
+            # logger.debug("origin rels of the batch before extended:\n{}".format(gt_rels.cpu().numpy()))
             rois, labels, rel_labels = proposal_assignments_gtbox(
                 rois.data, gt_boxes.data, gt_classes.data, gt_rels.data, image_offset, self.add_bg_rels
             )

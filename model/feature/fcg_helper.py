@@ -187,3 +187,36 @@ def pre_process(fcg: FCGBuilder, rel_inds, ent_probs, triplet):
     bridge_edges_tri_l1 = fn.normalize(bridge_edges_tri_l1, p=1, dim=1)
 
     return bridge_edges_tri_l1, normal_rel_mask, triplet
+
+def filter_out_nonrel(fcg: FCGBuilder, rel_inds, ent_probs, triplet):
+    """
+    剔除不在 l3nodes 中存在的关系对
+    """
+
+    num_img_all_rels = triplet.size(0)
+    # 1. 根据 rel_inds 找到关系对应的 gt_boxes
+    sub_boxes = rel_inds[:, 0]  # 主语对应的 box 索引
+    obj_boxes = rel_inds[:, 1]  # 宾语对应的 box 索引
+
+    # 2. 获取 boxes 对应的实体类别概率分布
+    sub_probs = ent_probs[sub_boxes]  # (num_rels, 151) 主语的类别概率
+    obj_probs = ent_probs[obj_boxes]  # (num_rels, 151) 宾语的类别概率
+
+    # 初始化 normal_rel_mask 为全 1 张量
+    normal_rel_mask = torch.ones(num_img_all_rels, dtype=torch.bool, device=CUDA_DEVICE)
+
+    # 3. 剔除 <s,o> 对不存在的样本
+    count = 0
+    for i in range(num_img_all_rels):
+        s_max = torch.argmax(sub_probs[i]).item()  # 拿到最大概率的实体索引
+        o_max = torch.argmax(obj_probs[i]).item()  # 改进点：可以考虑 Top-K
+        if not fcg.has_sample(s_max, o_max):
+            normal_rel_mask[i] = False
+            count += 1
+
+    # 布尔切片
+    triplet = triplet[normal_rel_mask, :]
+    num_img_all_rels_filtered = triplet.size(0)
+    logger.debug('rels num in this image | filter out: {}, left: {}'.format(count, num_img_all_rels_filtered))
+
+    return normal_rel_mask, triplet

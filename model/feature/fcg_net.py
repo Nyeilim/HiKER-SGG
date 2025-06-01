@@ -2,10 +2,13 @@ import torch
 import torch.nn.functional as fn
 from torch.cuda import current_device
 from torch.nn import Module, Linear
+from time import time as time_time
 
-from model.feature.fcg_helper import hierarchical_reasoning_fcg, pre_process, post_process, pred_center_reasoning
+from model.feature.fcg_helper import hierarchical_reasoning_fcg, pre_process, post_process, pred_center_reasoning, \
+    filter_out_nonrel
 from model.feature.fcg_builder import FCGBuilder
 from model.util import MLP
+from config import logger
 
 CUDA_DEVICE = torch.device(f'cuda:{current_device()}')
 
@@ -241,9 +244,11 @@ class FCGNetV2(Module):
         :param vr: shape(img_all_rels,1024) 关系的视觉特征
         :return: pred_cls_score: 谓词的预测概率
         """
-
         # 预处理
-        bridge_edges_tri_l1, normal_rel_mask, triplet = pre_process(self.fcg, rel_inds, ent_probs, vr)
+        _start = time_time()
+        # bridge_edges_tri_l1, normal_rel_mask, triplet = pre_process(self.fcg, rel_inds, ent_probs, vr)
+        normal_rel_mask, triplet = filter_out_nonrel(self.fcg, rel_inds, ent_probs, vr)
+        _pre_process = time_time()
 
         # 使用交叉注意力机制与谓词中心对齐特征
         aligned_triplet = self.cross_attention(
@@ -256,5 +261,8 @@ class FCGNetV2(Module):
         # pred_cls_score = hierarchical_reasoning_fcg(self.fcg, bridge_edges_tri_l1, aligned_triplet, self.fcg_l2_feats, self.fcg_l3_feats)
         pred_cls_score = pred_center_reasoning(self.pred_centers, aligned_triplet)
         pred_cls_score = post_process(pred_cls_score, normal_rel_mask)
+
+        _end = time_time()
+        logger.debug(f"FCGNet 前向传播总耗时:{_end - _start:.4f}s, 预处理耗时:{_pre_process - _start:.4f}s")
 
         return pred_cls_score

@@ -14,7 +14,8 @@ def train_epoch(model, conf, train_set, train_set_loader, epoch_num, optimizer):
     tr = []
     start = time_time()
     # disable = not verbose，关闭进度条，不然日志文件会很长
-    prog_bar = tqdm(enumerate(train_set_loader), total=int(len(train_set) / train_set_loader.batch_size), disable = DIS_PROGRESS_BAR)
+    prog_bar = tqdm(enumerate(train_set_loader), total=int(len(train_set) / train_set_loader.batch_size),
+                    disable = DIS_PROGRESS_BAR, bar_format='{l_bar}{bar}{r_bar}\n')
     for batch_idx, batch in prog_bar:
         # print(train_batch(batch, verbose=batch_idx % (conf.print_interval*10) == 0))
         result, loss_dict = train_batch(model, conf, batch, optimizer, verbose=batch_idx % (conf.print_interval * 10) == 0)
@@ -59,13 +60,13 @@ def train_batch(model, conf, batch, optimizer, verbose=False):
             loss_fcg = model.fcg_loss(result)
             loss += loss_fcg
     forward_time = time_time() - forward_start
-    logger.debug(f"前向传播耗时: {forward_time:.4f}s")
+    logger.debug(f"前向传播总耗时: {forward_time:.4f}s")
     
     backward_start = time_time() # 反向传播计时开始
     with amp.scale_loss(loss, optimizer) as scaled_loss: # 损失缩放，混合精度
         scaled_loss.backward() # 启用反向传播，计算出各个参数的梯度
     backward_time = time_time() - backward_start
-    logger.debug(f"反向传播耗时: {backward_time:.4f}s")
+    logger.debug(f"反向传播总耗时: {backward_time:.4f}s")
 
     clip_grad_norm([(n, p) for n, p in model.named_parameters() if p.grad is not None],  # 所有叶子节点，即 W、B
                    max_norm=conf.clip, verbose=verbose, clip=True) # 梯度裁剪，所有参数梯度 L2 范数的和不能超过 conf.clip

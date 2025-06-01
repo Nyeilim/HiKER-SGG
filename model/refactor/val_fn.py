@@ -28,7 +28,7 @@ def val_batch(
     if conf.num_gpus == 1:
         det_res = [det_res]
     forward_time = time_time() - forward_start
-    logger.debug(f"前向传播耗时: {forward_time:.4f}s")
+    logger.debug(f"前向传播总耗时: {forward_time:.4f}s")
 
     for i, (boxes_i, objs_i, obj_scores_i, rels_i, pred_scores_i) in enumerate(det_res):
         # 真实标注
@@ -68,7 +68,8 @@ def _val_epoch(model, conf, dataset, dataloader, matrix_eval):
     evaluator_multiple_preds = BasicSceneGraphEvaluator.all_modes(multiple_preds=True)
 
     # 该函数接收一个可迭代对象，返回一个行为与原对象相同的迭代器，但在每次请求值时打印动态更新的进度条。
-    prog_bar = tqdm(enumerate(dataloader), total=int(len(dataset) / dataloader.batch_size), disable=DIS_PROGRESS_BAR)
+    prog_bar = tqdm(enumerate(dataloader), total=int(len(dataset) / dataloader.batch_size),
+                    disable=DIS_PROGRESS_BAR, bar_format='{l_bar}{bar}{r_bar}\n')
 
     with torch_no_grad():
         for batch_idx, batch in prog_bar:
