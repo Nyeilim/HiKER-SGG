@@ -322,8 +322,10 @@ class HiKER(Module):
             bboxes = result.rm_box_priors
 
         # GGNN FCGNet 两条分支给出的概率分布作融合，如果不想启用 FCGNet 则直接返回 GGNN 的概率分布
-        rel_rep = 0.9 * result.rel_dists + 0.1 * result.fcg_pred_softmax
-        # rel_rep = F_softmax(result.rel_dists, dim=1)
+        if USE_FCG:
+            rel_rep = 0.9 * result.rel_dists + 0.1 * result.fcg_pred_softmax
+        else:
+            rel_rep = F_softmax(result.rel_dists, dim=1)
 
         return filter_dets(bboxes, result.obj_scores,
                            result.obj_preds, rel_inds[:, 1:], rel_rep)

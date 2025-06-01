@@ -24,7 +24,7 @@ conf = ModelConfig(f'''
 -p 2500
 -clip 5
 -ckpt checkpoints/kern_predcls/hikersgg_predcls_train/vgrel-{test_epoch}.tar
--b 4
+-b 8
 -nwork 8
 -ngpu 1
 -lr 1e-4

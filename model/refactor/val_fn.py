@@ -1,9 +1,10 @@
 import numpy as np
 from torch import no_grad as torch_no_grad
 from torch.cuda.amp import autocast
+from time import time as time_time
 from tqdm import tqdm
 
-from config import BOX_SCALE, IM_SCALE, DIS_PROGRESS_BAR, data_path
+from config import BOX_SCALE, IM_SCALE, DIS_PROGRESS_BAR, data_path, logger
 from model.evaluation.sg_eval import BasicSceneGraphEvaluator, calculate_mr, eval_entry
 
 
@@ -21,10 +22,13 @@ def val_batch(
         evaluator, evaluator_multiple_preds,
         evaluator_list, evaluator_multiple_preds_list
 ):
+    forward_start = time_time()  # 前向传播计时开始
     with autocast():
         det_res = model[batch]
     if conf.num_gpus == 1:
         det_res = [det_res]
+    forward_time = time_time() - forward_start
+    logger.debug(f"前向传播耗时: {forward_time:.4f}s")
 
     for i, (boxes_i, objs_i, obj_scores_i, rels_i, pred_scores_i) in enumerate(det_res):
         # 真实标注
