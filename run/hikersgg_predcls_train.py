@@ -35,7 +35,7 @@ conf = ModelConfig(f'''
 -nwork 8
 -ngpu 1
 -lr 1e-4
--nepoch 20
+-nepoch 15
 -pooling_dim 4096
 -ggnn_rel_time_step_num 3
 -ggnn_rel_hidden_dim 1024
