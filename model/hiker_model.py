@@ -329,7 +329,7 @@ class HiKER(Module):
         if USE_FCG:
             rel_rep = 0.9 * result.rel_dists + 0.1 * result.fcg_pred_softmax
         else:
-            rel_rep = F_softmax(result.rel_dists, dim=1)
+            rel_rep = result.rel_dists
 
         return filter_dets(bboxes, result.obj_scores,
                            result.obj_preds, rel_inds[:, 1:], rel_rep)
