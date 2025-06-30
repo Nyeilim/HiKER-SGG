@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as fn
 from torch.cuda import current_device
-from torch.nn import Module, Linear
+from torch.nn import Module, Linear, MultiheadAttention
 from time import time as time_time
 
 from model.feature.fcg_helper import hierarchical_reasoning_fcg, pre_process, post_process, pred_center_reasoning, \
@@ -167,29 +167,34 @@ class FCGNetV2(Module):
     使用交叉注意力机制对齐特征，而不是通过消息传递更新FCG节点
     """
 
-    def __init__(self, hidden_dim=1024):
+    def __init__(self, hidden_dim=1024, num_heads=8):
         super(FCGNetV2, self).__init__()
         self.hidden_dim = hidden_dim
+        self.num_heads = num_heads
 
         # 加载 FCG
         self.fcg = FCGBuilder(hidden_dim=hidden_dim)
 
-        # 复制 FCG 节点特征（静态特征，不会被更新）
-        self.fcg_l2_feats = torch.stack([node.feat for node in self.fcg.l2_nodes]).to(CUDA_DEVICE)
-        self.fcg_l3_feats = torch.stack([node.feat for node in self.fcg.l3_nodes]).to(CUDA_DEVICE)
-
+        # 构建并缓存所有需要的张量，使用register_buffer让PyTorch自动处理设备迁移
+        fcg_l2_feats = torch.stack([node.feat for node in self.fcg.l2_nodes])
+        fcg_l3_feats = torch.stack([node.feat for node in self.fcg.l3_nodes])
+        
         # 构建谓词中心特征张量，按照 key 从小到大排序后转换为 list
         sorted_pred_centers = [self.fcg.pred_center[k] for k in sorted(self.fcg.pred_center.keys())]
-        self.pred_centers = torch.stack(sorted_pred_centers).to(CUDA_DEVICE)
+        pred_centers = torch.stack(sorted_pred_centers)
+        
+        # 注册所有buffer，让PyTorch自动处理设备迁移和保存/加载
+        self.register_buffer('fcg_l2_feats', fcg_l2_feats)
+        self.register_buffer('fcg_l3_feats', fcg_l3_feats)
+        self.register_buffer('pred_centers', pred_centers)
 
-        # 交叉注意力机制相关层 - 只保留一个用于谓词中心的交叉注意力
-        # 查询/键/值投影层
-        self.q_proj = Linear(hidden_dim, hidden_dim)
-        self.k_proj = Linear(hidden_dim, hidden_dim)
-        self.v_proj = Linear(hidden_dim, hidden_dim)
-
-        # 多头注意力后的线性层
-        self.linear = Linear(hidden_dim, hidden_dim)
+        # 使用PyTorch现成的MultiheadAttention替换手动实现的交叉注意力
+        self.cross_attention = MultiheadAttention(
+            embed_dim=hidden_dim,
+            num_heads=num_heads,
+            dropout=0.1,
+            batch_first=True
+        )
 
         # 层归一化
         self.norm1 = torch.nn.LayerNorm(hidden_dim)
@@ -197,44 +202,6 @@ class FCGNetV2(Module):
 
         # 前馈网络
         self.ffn = MLP([hidden_dim, hidden_dim * 2, hidden_dim], act_fn='ReLU', last_act=False)
-
-    def cross_attention(self, q_proj, k_proj, v_proj, linear, norm1, norm2, ffn, x, context):
-        """
-        交叉注意力机制
-        :param q_proj: 查询投影层
-        :param k_proj: 键投影层
-        :param v_proj: 值投影层
-        :param linear: 线性层
-        :param norm1: 第一个层归一化
-        :param norm2: 第二个层归一化
-        :param ffn: 前馈网络
-        :param x: 输入特征
-        :param context: 上下文特征
-        :return: 经过注意力机制处理后的特征
-        """
-        # 多头注意力
-        q = q_proj(x)
-        k = k_proj(context)
-        v = v_proj(context)
-
-        # 计算注意力分数
-        attn_scores = torch.matmul(q, k.transpose(-2, -1)) / (self.hidden_dim ** 0.5)
-        attn_weights = fn.softmax(attn_scores, dim=-1)
-
-        # 应用注意力权重
-        attn_output = torch.matmul(attn_weights, v)
-        attn_output = linear(attn_output)
-
-        # 残差连接和层归一化
-        x = norm1(x + attn_output)
-
-        # 前馈网络
-        ffn_output = ffn(x)
-
-        # 残差连接和层归一化
-        x = norm2(x + ffn_output)
-
-        return x
 
     def forward(self, rel_inds, ent_probs, vr):
         """
@@ -246,19 +213,36 @@ class FCGNetV2(Module):
         """
         # 预处理
         _start = time_time()
-        # bridge_edges_tri_l1, normal_rel_mask, triplet = pre_process(self.fcg, rel_inds, ent_probs, vr)
         normal_rel_mask, triplet = filter_out_nonrel(self.fcg, rel_inds, ent_probs, vr)
         _pre_process = time_time()
 
-        # 使用交叉注意力机制与谓词中心对齐特征
-        aligned_triplet = self.cross_attention(
-            self.q_proj, self.k_proj, self.v_proj,
-            self.linear, self.norm1, self.norm2, self.ffn,
-            triplet, self.pred_centers
+        # 使用PyTorch的MultiheadAttention进行交叉注意力
+        # 输入形状: (batch_size, seq_len, hidden_dim)
+        # triplet: (num_rels, hidden_dim) -> (1, num_rels, hidden_dim)
+        # pred_centers: (num_preds, hidden_dim) -> (1, num_preds, hidden_dim)
+        triplet_expanded = triplet.unsqueeze(0)  # (1, num_rels, hidden_dim)
+        pred_centers_expanded = self.pred_centers.unsqueeze(0)  # (1, num_preds, hidden_dim)
+        
+        # 交叉注意力：triplet作为query，pred_centers作为key和value
+        attn_output, _ = self.cross_attention(
+            query=triplet_expanded,
+            key=pred_centers_expanded,
+            value=pred_centers_expanded
         )
+        
+        # 残差连接和层归一化
+        aligned_triplet = self.norm1(triplet_expanded + attn_output)
+        
+        # 前馈网络
+        ffn_output = self.ffn(aligned_triplet)
+        
+        # 残差连接和层归一化
+        aligned_triplet = self.norm2(aligned_triplet + ffn_output)
+        
+        # 恢复原始形状
+        aligned_triplet = aligned_triplet.squeeze(0)  # (num_rels, hidden_dim)
 
-        # 使用对齐后的特征进行层级推理 @formatter:off
-        # pred_cls_score = hierarchical_reasoning_fcg(self.fcg, bridge_edges_tri_l1, aligned_triplet, self.fcg_l2_feats, self.fcg_l3_feats)
+        # 使用对齐后的特征进行层级推理
         pred_cls_score = pred_center_reasoning(self.pred_centers, aligned_triplet)
         pred_cls_score = post_process(pred_cls_score, normal_rel_mask)
 
