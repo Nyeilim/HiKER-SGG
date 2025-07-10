@@ -11,7 +11,7 @@ sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
 import config
 from model.refactor.val_fn import val_epoch, confusion_matrix_evaluate
 from model.refactor.provider import provide_model, provide_dataloader
-from model.refactor.util import save_best_matrices
+from model.refactor.util import save_best_matrices, load_best_matrices
 from model.refactor.optim_fn import get_optim
 from model.refactor.train_fn import train_epoch
 from model.util import adj_normalize
@@ -21,21 +21,30 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # 选择显卡
 exp_name = 'hikersgg_sgcls_train'  # 实验名
 write = tqdm.write  # 函数引用赋值，用来打印日志
 
+# 获取 PredCls 训练中指标最好的模型 epoch
+try:
+    predcls_best_epoch = load_best_matrices()['best_mr_epoch']
+    print(f"Using PredCls best model from epoch {predcls_best_epoch}")
+except:
+    # 如果无法获取最佳模型，使用默认的 epoch 10
+    predcls_best_epoch = 10
+    print(f"Using default PredCls model from epoch {predcls_best_epoch}")
+
 # 创建配置类，加载配置
-# 注意：SGCls任务需要从predcls训练好的模型开始训练
+# 注意：SGCls任务需要从PredCls训练好的模型开始训练
 conf = ModelConfig(f'''
 -m sgcls
 -p 2500
 -clip 5
 -tb_log_dir summaries/kern_sgcls/{exp_name}
 -save_dir checkpoints/kern_sgcls/{exp_name}
--ckpt checkpoints/kern_predcls/hikersgg_predcls_train/vgrel-10.tar
+-ckpt checkpoints/kern_predcls/hikersgg_predcls_train/vgrel-{predcls_best_epoch}.tar
 -val_size 5000
--b 3
--nwork 9
+-b 8
+-nwork 8
 -ngpu 1
 -lr 1e-5
--nepoch 20
+-nepoch 15
 -pooling_dim 4096
 -ggnn_rel_time_step_num 3
 -ggnn_rel_hidden_dim 1024
@@ -52,9 +61,13 @@ conf = ModelConfig(f'''
 conf.print_self_config()
 print_globals(config)
 
-# 加载对应的混淆矩阵（从predcls训练的第8轮开始）
-# 注意：SGCls任务需要从predcls训练好的混淆矩阵开始
-conf_matrix = np.load(data_path('misc/conf/conf_mat_updated_8.npy'))  # 记得修改为对应的混淆矩阵路径
+# 加载对应的混淆矩阵（从Predcls训练的最佳epoch对应的混淆矩阵开始）
+# 注意：SGCls任务需要从Predcls训练好的混淆矩阵开始
+matrix_suffix = predcls_best_epoch - (predcls_best_epoch + 1) % 3  # 混淆矩阵会每三轮计算一次
+if matrix_suffix < 2:
+    conf_matrix = np.load(CONF_MAT_FREQ_TRAIN)
+else:
+    conf_matrix = np.load(data_path(f'misc/conf/conf_mat_updated_{matrix_suffix}.npy'))
 np.save(CONF_MAT_UPDATED, conf_matrix)
 
 # 各种变量的创建

@@ -55,6 +55,12 @@ def train_batch(model, conf, batch, optimizer, verbose=False):
 
         loss = loss_class + loss_rel + loss_scpred # 成本函数
 
+        # SGCls 任务需要额外的 scent_loss
+        loss_scent = 0
+        if conf.mode == 'sgcls' and conf.refine_obj_cls:
+            loss_scent = model.scent_loss(result)
+            loss += loss_scent
+
         loss_fcg = 0
         if USE_FCG:
             loss_fcg = model.fcg_loss(result)
@@ -76,6 +82,7 @@ def train_batch(model, conf, batch, optimizer, verbose=False):
         'loss_class': float(loss_class),
         'loss_rel': float(loss_rel),
         'loss_scpred': float(loss_scpred),
+        'loss_scent': float(loss_scent),
         'loss_fcg': float(loss_fcg),
         'loss_total': float(loss),
     }
