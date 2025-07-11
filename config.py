@@ -66,7 +66,7 @@ def print_globals(module):
 
 # =============================================================================
 # 日志打印
-IS_DEBUG = True
+IS_DEBUG = False
 logging.basicConfig(
     level=logging.DEBUG if IS_DEBUG else logging.INFO,
     format='%(message)s'

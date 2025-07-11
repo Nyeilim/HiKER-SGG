@@ -23,7 +23,7 @@ write = tqdm.write  # 函数引用赋值，用来打印日志
 
 # 获取 PredCls 训练中指标最好的模型 epoch
 try:
-    predcls_best_epoch = load_best_matrices()['best_mr_epoch']
+    predcls_best_epoch = load_best_matrices('predcls')['best_mr_epoch']
     print(f"Using PredCls best model from epoch {predcls_best_epoch}")
 except:
     # 如果无法获取最佳模型，使用默认的 epoch 10
@@ -133,4 +133,4 @@ for epoch in range(conf.num_epochs):
     matrices_list.append(matrices[2]) # mean_recall
     nc_matrices_list.append(matrices[3]) # mean_recall_mp
 
-save_best_matrices(matrices_list, nc_matrices_list) 
+save_best_matrices(matrices_list, nc_matrices_list, 'sgcls') 

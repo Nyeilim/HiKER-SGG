@@ -15,7 +15,6 @@ from lib.kern_old.lrga import LowRankAttention
 from model.util import MLP, adj_normalize
 from config import CONF_MAT_FREQ_TRAIN, MODEL, EDGE_MATRIX
 from model.feature.bridge_prior import ContextAwarePrior
-from model.feature.ha import DoubleHA
 
 CUDA_DEVICE = torch.device(f'cuda:{current_device()}')
 
@@ -209,8 +208,7 @@ class GGNN(Module):
                     print(f'No SA: Not using adj_normalize.self.sa={self.sa}')
                 self.pred_adj_nor = torch.tensor(pred_adj_np, dtype=torch.float32, device=CUDA_DEVICE)  # 转换为张量
 
-        # 新增 HA 层和上下文感知的桥边初始化器
-        self.double_ha = DoubleHA(hidden_dim=hidden_dim)
+        # 新增上下文感知的桥边初始化器
         self.context_prior = None  # 延迟初始化，等待edge_matrix
 
     def forward(self, rel_inds, obj_probs, obj_fmaps, vr):

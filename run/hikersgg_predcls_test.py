@@ -14,7 +14,7 @@ from model.refactor.util import load_best_matrices
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 exp_name = 'hikersgg_predcls_test'
-test_epoch = load_best_matrices()['best_mr_epoch']  # 需要测试第几个 epoch 训练出来的模型
+test_epoch = load_best_matrices('predcls')['best_mr_epoch']  # 需要测试第几个 epoch 训练出来的模型
 print(f"Start test epoch {test_epoch}")
 
 # Change ckpt path for the evaluated model
@@ -54,5 +54,3 @@ np.save(CONF_MAT_UPDATED, conf_matrix)
 test_set, test_set_loader = provide_dataloader(conf, 'test')  # 加载数据集
 model = provide_model(conf, test_set.ind_to_classes, test_set.ind_to_predicates)  # 加载模型
 val_epoch(model, conf, test_set, test_set_loader)  # 开始评估
-# model = finetune(model, conf) # 微调
-# val_epoch(model, conf, test_set, test_set_loader) # 再次评估

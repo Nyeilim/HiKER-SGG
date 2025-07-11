@@ -116,4 +116,4 @@ for epoch in range(conf.num_epochs):
     matrices_list.append(matrices[2]) # mean_recall
     nc_matrices_list.append(matrices[3]) # mean_recall_mp
 
-save_best_matrices(matrices_list, nc_matrices_list)
+save_best_matrices(matrices_list, nc_matrices_list, 'predcls')
