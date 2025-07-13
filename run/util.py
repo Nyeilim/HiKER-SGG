@@ -245,7 +245,7 @@ def train_flow(task_type='predcls', exp_name=None):
     :param task_type: 任务类型 ('predcls' 或 'sgcls')
     :param exp_name: 实验名称
     """
-    print("开始 {} 训练流程...".format(task_type))
+    print("Starting {} training process...".format(task_type))
     
     # 创建配置
     conf = create_train_config(task_type, exp_name)
@@ -314,7 +314,7 @@ def train_flow(task_type='predcls', exp_name=None):
         best_matrices['best_mr_epoch'],  # 最佳模型
         best_matrices['second_best_mr_epoch']  # 第二佳模型
     ]
-    print("训练完成，开始清理模型文件，保留 epoch {} 和 {} 的模型".format(keep_epochs[0], keep_epochs[1]))
+    print("Training completed, starting to clean up model files, keeping models from epoch {} and {}".format(keep_epochs[0], keep_epochs[1]))
     cleanup_model_files(task_type, keep_epochs=keep_epochs)
 
 
@@ -323,7 +323,7 @@ def test_flow(task_type='predcls'):
     测试流程
     :param task_type: 任务类型 ('predcls' 或 'sgcls')
     """
-    print("开始 {} 测试流程...".format(task_type))
+    print("Starting {} testing process...".format(task_type))
     
     # 获取前两个最佳模型的epoch
     best_matrices = load_best_matrices(task_type)
@@ -331,11 +331,11 @@ def test_flow(task_type='predcls'):
         best_matrices['best_mr_epoch'],  # 最佳模型
         best_matrices['second_best_mr_epoch']  # 第二佳模型
     ]
-    print("将测试前两个最佳模型：epoch {} 和 epoch {}".format(test_epochs[0], test_epochs[1]))
+    print("Will test the top two best models: epoch {} and epoch {}".format(test_epochs[0], test_epochs[1]))
     
     # 测试每个模型
     for epoch in test_epochs:
-        print("开始测试 epoch {} 的模型...".format(epoch))
+        print("Starting to test model from epoch {}...".format(epoch))
         
         # 创建配置
         conf = create_test_config(task_type, epoch)

@@ -95,9 +95,9 @@ def cleanup_model_files(task_type='predcls', keep_epochs=None):
     if keep_epochs is None:
         keep_epochs = []
     
-    save_dir = f"checkpoints/kern_{task_type}/hikersgg_{task_type}_train"
+    save_dir = data_path(f"checkpoints/kern_{task_type}/hikersgg_{task_type}_train")
     if not os.path.exists(save_dir):
-        print(f"目录 {save_dir} 不存在，跳过清理")
+        print(f"Directory {save_dir} does not exist, skipping cleanup")
         return
     
     # 获取所有模型文件
@@ -112,8 +112,8 @@ def cleanup_model_files(task_type='predcls', keep_epochs=None):
             if epoch not in keep_epochs:
                 os.remove(model_file)
                 cleaned_count += 1
-                print(f"已删除模型文件: {model_file}")
+                print(f"Deleted model file: {model_file}")
         except ValueError:
-            print(f"无法解析文件名中的epoch: {filename}")
+            print(f"Cannot parse epoch from filename: {filename}")
     
-    print(f"清理完成，删除了 {cleaned_count} 个模型文件")
+    print(f"Cleanup completed, deleted {cleaned_count} model files")
