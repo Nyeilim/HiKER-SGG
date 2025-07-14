@@ -92,10 +92,14 @@ CONF_MAT_FREQ_TRAIN = data_path('misc/conf_mat_freq_train.npy')  # 初始的谓�
 CONF_MAT_UPDATED = data_path('misc/conf_mat_updated.npy')  # 途中由混淆矩阵计算出的谓词转移矩阵，用于 SA
 EDGE_MATRIX = data_path('edge_matrix.npy')
 
+# =============================================================================
+# Feature
 ## FCG
 USE_FCG = True
 FCG_FREQ_LIMIT = 99999 # FCG 三级节点频率限制，超过这个频率的三元组不会构建三级节点
 FCG_NONREL_SAMPLE_RATIO = 1.0 # FCG 网络空关系采样比率，真实关系数量 * 比率 = 空关系数量
+# GGNN Bridge Edge Initial
+PRED_BRIDGE_EDGE_INITIAL = True
 # =============================================================================
 # 全局变量
 BPL_LIMIT = 1000 # BPL 单个谓词上限

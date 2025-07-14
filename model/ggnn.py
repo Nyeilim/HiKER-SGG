@@ -13,7 +13,7 @@ import torch.nn.functional as fn
 from model.refactor.hier import hierarchical_ent_reasoning, hierarchical_pred_reasoning
 from lib.kern_old.lrga import LowRankAttention
 from model.util import MLP, adj_normalize
-from config import CONF_MAT_FREQ_TRAIN, MODEL, EDGE_MATRIX
+from config import CONF_MAT_FREQ_TRAIN, MODEL, EDGE_MATRIX, PRED_BRIDGE_EDGE_INITIAL
 from model.feature.bridge_prior import ContextAwarePrior
 
 CUDA_DEVICE = torch.device(f'cuda:{current_device()}')
@@ -52,9 +52,8 @@ class GGNN(Module):
 
         # 新增属性
         self.normalize_classifier = False
-        self.pred_bridge_edge_initial = True
+        self.pred_bridge_edge_initial = PRED_BRIDGE_EDGE_INITIAL
         print("normalize_classifier: {} @ {}".format(self.normalize_classifier, __name__))
-        print("pred_bridge_edge_initial: {} @ {}".format(self.pred_bridge_edge_initial, __name__))
 
         if self.use_lrga is True:
             self.attention = ModuleList()
