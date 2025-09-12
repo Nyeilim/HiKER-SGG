@@ -10,7 +10,7 @@ def analyze_confusion_matrix():
     读取混淆矩阵文件，统计每个谓词的错误数量、总预测数和错误率
     """
     # 读取混淆矩阵文件
-    confusion_matrix = np.load(data_path('confusion_matrix.npy'))
+    confusion_matrix = np.load(data_path('confusion_matrix_predcls.npy'))
     print(f"混淆矩阵形状: {confusion_matrix.shape}")
     
     # 确保矩阵是 51x51 的
