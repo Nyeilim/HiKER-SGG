@@ -22,7 +22,7 @@ conf = ModelConfig(f'''
 -m predcls
 -b 8
 -ngpu 1
--nwork 24
+-nwork 8
 ''')
 
 train_full, train_full_loader = provide_dataloader(conf, 'confusion_matrix_val')

@@ -324,7 +324,8 @@ def test_flow(task_type='predcls'):
     :param task_type: 任务类型 ('predcls' 或 'sgcls')
     """
     print("Starting {} testing process...".format(task_type))
-    
+    print_globals(config)
+
     # 获取前两个最佳模型的epoch
     best_matrices = load_best_matrices(task_type)
     test_epochs = [
@@ -340,7 +341,6 @@ def test_flow(task_type='predcls'):
         # 创建配置
         conf = create_test_config(task_type, epoch)
         conf.print_self_config()
-        print_globals(config)
         
         # 设置混淆矩阵
         setup_confusion_matrix_for_test(epoch, task_type)
