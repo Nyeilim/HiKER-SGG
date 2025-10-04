@@ -210,13 +210,55 @@ class GGNN(Module):
         # 新增上下文感知的桥边初始化器
         self.context_prior = None  # 延迟初始化，等待edge_matrix
 
-    def forward(self, rel_inds, obj_probs, obj_fmaps, vr):
+        # ============== DPL 组件初始化 ==============
+        self.use_dpl = config.MODEL.USE_DPL if hasattr(config.MODEL, 'USE_DPL') else False
+
+        if self.use_dpl:
+            print(f'[GGNN] Enabling DPL with N_DIM={config.MODEL.DPL.N_DIM}')
+
+            # DPL 特征压缩层
+            self.dpl_dim = config.MODEL.DPL.N_DIM  # 默认 128
+            self.rel_compress_dpl = Linear(hidden_dim, self.dpl_dim)
+
+            # 原型嵌入 (每个谓词类一个原型)
+            self.proto_emb = torch.nn.Parameter(
+                torch.zeros(num_rel_cls, self.dpl_dim),
+                requires_grad=True
+            )
+            torch.nn.init.orthogonal_(self.proto_emb)
+
+            # 高斯参数网络
+            self.gaussian_emb = Linear(self.dpl_dim, self.dpl_dim * 2)
+
+            # 距离转换参数
+            self.shift = torch.nn.Parameter(torch.ones(1) * 15.0)
+            self.negative_scale = torch.nn.Parameter(torch.ones(1) * 15.0)
+
+            # DPL 超参数
+            self.dpl_sample_size = config.MODEL.DPL.AVG_NUM_SAMPLE
+            self.dpl_alpha = config.MODEL.DPL.ALPHA
+            self.dpl_radius = config.MODEL.DPL.RADIUS
+
+            # 采样数量数组（可选：根据类别频率调整）
+            if config.MODEL.DPL.FREQ_BASED_DIFF_N:
+                # TODO: 需要提供 VG 数据集的谓词计数文件
+                print('[DPL] FREQ_BASED_DIFF_N enabled but not implemented yet, using uniform sampling')
+                self.sample_size_array = np.ones(num_rel_cls, dtype=int) * self.dpl_sample_size
+            else:
+                self.sample_size_array = np.ones(num_rel_cls, dtype=int) * self.dpl_sample_size
+
+            # 测试时配置
+            self.dpl_use_in_test = config.MODEL.DPL.USE_IN_TEST
+            self.dpl_fusion_weight = config.MODEL.DPL.FUSION_WEIGHT
+
+    def forward(self, rel_inds, obj_probs, obj_fmaps, vr, rel_labels=None):
         """
         GGNN Rules 内核
         :param rel_inds: shape(img_all_rels,2) <s,o> 二元组
         :param obj_probs: shape(img_gt_boxes,151)
         :param obj_fmaps: gt_boxes 所在区域的特征图 shape(img_gt_boxes,1024)
         :param vr: rel 的视觉特征 shape(img_all_rels,1024)
+        :param rel_labels: shape(img_all_rels) 关系标签（仅训练时提供）
         :return: 谓词的预测概率 pred_cls_score 超类谓词的预测概率 scpred_cls_score
         """
         # This is a per_image representation, not an embedding.
@@ -395,9 +437,138 @@ class GGNN(Module):
                 edges_img2ont_ent = fn.softmax(ent_cls_logits, dim=1)
                 edges_ont2img_ent = edges_img2ont_ent.t()
 
+        # ============== DPL 分支 ==============
+        dpl_logits = None
+        dpl_losses = {}
+
+        if self.use_dpl:
+            # 压缩特征到 DPL 维度
+            dpl_features = self.rel_compress_dpl(nodes_img_pred)  # (num_img_pred, dpl_dim)
+
+            # 计算 DPL logits 和损失
+            dpl_logits, dpl_losses = self._compute_dpl(
+                dpl_features,
+                rel_labels=rel_labels  # 从 forward 参数传入
+            )
+
         # 循环结束，进行最后的层级分类
         pred_cls_score, scpred_cls_score = hierarchical_pred_reasoning(pred_cls_logits, with_transfer)
         if refine_obj_cls:  # False
             ent_cls_score, scent_cls_score = hierarchical_ent_reasoning(ent_cls_logits)
 
-        return pred_cls_score, ent_cls_score, scpred_cls_score, scent_cls_score
+        # 修改返回值，包含 DPL logits 和损失
+        if self.use_dpl:
+            return pred_cls_score, ent_cls_score, scpred_cls_score, scent_cls_score, dpl_logits, dpl_losses
+        else:
+            return pred_cls_score, ent_cls_score, scpred_cls_score, scent_cls_score, None, {}
+
+    def _compute_dpl(self, features, rel_labels=None):
+        """
+        计算 DPL 的 logits 和损失
+
+        Args:
+            features: (num_rel, dpl_dim) 压缩后的关系特征
+            rel_labels: (num_rel,) 关系标签，仅训练时提供
+
+        Returns:
+            dpl_logits: (num_rel, num_rel_cls) DPL 分类 logits
+            add_losses: dict, 包含 'ortho_loss' 和 'sample_loss'
+        """
+        add_losses = {}
+
+        # 归一化原型
+        predicate_proto = self.proto_emb
+        predicate_proto_norm = predicate_proto / predicate_proto.norm(dim=1, keepdim=True)
+
+        # 计算高斯参数
+        gaussian = self.gaussian_emb(predicate_proto_norm)
+        mu, logsigma = torch.split(gaussian, self.dpl_dim, dim=1)
+
+        # 计算特征到原型的距离
+        num_rel = features.size(0)
+        rel_rep_expand = features.unsqueeze(1).expand(-1, self.proto_emb.size(0), -1)
+        proto_expand = predicate_proto_norm.unsqueeze(0).expand(num_rel, -1, -1)
+        distance_set = (rel_rep_expand - proto_expand).norm(dim=2)
+
+        # 距离转换为 logits
+        dpl_logits = -self.negative_scale * distance_set + self.shift
+
+        # ========== 训练阶段：计算额外损失 ==========
+        if self.training and rel_labels is not None:
+            # 1. 正交损失：确保不同类别原型相互正交
+            proto_sim = torch.matmul(predicate_proto_norm, predicate_proto_norm.t())
+            ortho_loss = self._get_orth_loss(proto_sim)
+            add_losses['ortho_loss'] = ortho_loss
+
+            # 2. 采样损失：从高斯分布采样，强制特征落在原型半径内
+            detach_proto = predicate_proto_norm.detach()
+            z = self._sample_gaussian_tensors(
+                detach_proto, logsigma, self.sample_size_array
+            ).view(-1, self.dpl_dim)
+
+            # 计算到采样点的距离
+            distance_set_z = self._distance(features, z)
+
+            # 找到每个类别的最小距离
+            distance_set_m = self._get_min_dists_z(distance_set_z, self.sample_size_array)
+
+            # 选择正确类别的距离
+            selected_distance = distance_set_m[torch.arange(rel_labels.size(0)), rel_labels]
+
+            # Hinge loss: 距离应该在半径内
+            zeros_tensor = torch.zeros_like(selected_distance)
+            sample_loss = torch.mean(
+                torch.where(
+                    selected_distance > self.dpl_radius,
+                    torch.pow(selected_distance - self.dpl_radius, 2),
+                    zeros_tensor
+                )
+            )
+            add_losses['sample_loss'] = sample_loss * self.dpl_alpha
+
+        # ========== 测试阶段：使用方差加权距离 ==========
+        elif not self.training:
+            nd = ((rel_rep_expand - proto_expand) / (logsigma.exp() + 1e-8)).norm(dim=2)
+            ndn = (nd.t() / (nd.max(dim=1)[0] + 1e-8) * distance_set.max(dim=1)[0]).t()
+            dpl_logits = -self.negative_scale * ndn + self.shift
+
+        return dpl_logits, add_losses
+
+    def _get_orth_loss(self, proto_sim):
+        """计算原型正交损失"""
+        eye_sim = torch.triu(torch.ones_like(proto_sim), diagonal=1)
+        loss_orth = torch.abs(proto_sim[eye_sim == 1]).mean()
+        return loss_orth
+
+    def _sample_gaussian_tensors(self, mu, logsigma, num_samples):
+        """从高斯分布采样"""
+        total_samples = self._sample_each(mu[0], logsigma[0], num_samples[0])
+        for i in range(1, mu.size(0)):
+            samples = self._sample_each(mu[i], logsigma[i], num_samples[i])
+            total_samples = torch.cat([total_samples, samples], dim=0)
+        return total_samples
+
+    def _sample_each(self, mu_i, logsigma_i, num_samples_i):
+        """为单个类别采样"""
+        eps = torch.randn(num_samples_i, mu_i.size(0), dtype=mu_i.dtype, device=mu_i.device)
+        samples = eps.mul(torch.exp(logsigma_i)).add_(mu_i)
+        return samples
+
+    def _distance(self, t1, t2):
+        """计算欧氏距离矩阵"""
+        t1_square = torch.sum(t1 ** 2, dim=1, keepdim=True)
+        t2_square = torch.sum(t2 ** 2, dim=1)
+        distance_set = torch.sqrt(
+            t1_square + t2_square - 2 * torch.matmul(t1, t2.t()) + 1e-8
+        )
+        return distance_set
+
+    def _get_min_dists_z(self, rel_dists_z, num_samples):
+        """获取到采样点的最小距离"""
+        total_md = rel_dists_z[:, :num_samples[0]].sort(1, descending=False)[0][:, :1]
+        count = num_samples[0]
+        for i in range(1, len(num_samples)):
+            md = rel_dists_z[:, count:count+num_samples[i]].sort(1, descending=False)[0][:, :1]
+            total_md = torch.cat([total_md, md], dim=1)
+            count = count + num_samples[i]
+        return total_md

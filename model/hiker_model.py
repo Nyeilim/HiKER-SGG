@@ -66,7 +66,7 @@ class GGNNRelReason(Module):
         self.fcg_net = FCGNetV2()
 
     # 这个 forward 方法是 Module 抽象类里面待实现的 Callable 方法
-    def forward(self, im_inds, obj_fmaps, obj_logits, rel_inds, vr, obj_labels=None, boxes_per_cls=None, fcg_rel_mask=None):
+    def forward(self, im_inds, obj_fmaps, obj_logits, rel_inds, vr, obj_labels=None, boxes_per_cls=None, fcg_rel_mask=None, rel_labels=None):
         """
         Reason relationship classes using knowledge of object and relationship co-currency.
         入参的 obj_logits 就是前面的 obj_dist
@@ -84,9 +84,41 @@ class GGNNRelReason(Module):
         scpred_softmax = []
         scent_softmax= []
         fcg_pred_softmax = []
+        dpl_losses_batch = []  # 收集 DPL 损失
+
         for (_, obj_s, obj_e), (_, rel_s, rel_e) in zip(enumerate_by_image(im_inds.data), enumerate_by_image(rel_inds[:,0])):
+            # 获取当前图像的 rel_labels（仅训练时）
+            img_rel_labels = None
+            if self.training and rel_labels is not None:
+                img_rel_labels = rel_labels[rel_s:rel_e, -1]  # 只需要谓词标签（最后一列）
+
             # 调用 GGNN 内核，然后把前向传播的每个结果添加到前面的列表中。这里的返回值只有 rl scpred 有值
-            rl, ol, scpred, scent = self.ggnn(rel_inds[rel_s:rel_e, 1:] - obj_s, obj_probs[obj_s:obj_e], obj_fmaps[obj_s:obj_e], vr[rel_s:rel_e]) # 实际上是每次前向传播，是处理一张图片的数据
+            if self.ggnn.use_dpl:
+                rl, ol, scpred, scent, dpl_logits_img, dpl_losses_img = self.ggnn(
+                    rel_inds[rel_s:rel_e, 1:] - obj_s,
+                    obj_probs[obj_s:obj_e],
+                    obj_fmaps[obj_s:obj_e],
+                    vr[rel_s:rel_e],
+                    img_rel_labels  # 传递 rel_labels
+                )
+
+                # 收集 DPL 损失
+                if self.training and dpl_losses_img:
+                    dpl_losses_batch.append(dpl_losses_img)
+
+                # 测试时选择使用哪个 logits
+                if not self.training and self.ggnn.dpl_use_in_test:
+                    # 融合两者
+                    rl = (1 - self.ggnn.dpl_fusion_weight) * rl + \
+                         self.ggnn.dpl_fusion_weight * dpl_logits_img
+            else:
+                rl, ol, scpred, scent, _, _ = self.ggnn(
+                    rel_inds[rel_s:rel_e, 1:] - obj_s,
+                    obj_probs[obj_s:obj_e],
+                    obj_fmaps[obj_s:obj_e],
+                    vr[rel_s:rel_e],
+                    img_rel_labels  # 即使不用 DPL 也要传递，保持接口一致
+                )
             
             # # 获取当前图像的关系掩码
             # if USE_FCG:
@@ -154,7 +186,13 @@ class GGNNRelReason(Module):
         else:
             obj_preds = obj_labels if obj_labels is not None else obj_probs[:,1:].max(1)[1] + 1 # PredCl 和 SGCl 任务不用做分类，直接拿真实标签作为 entity 的预测标签
 
-        return obj_logits, obj_preds, rel_logits, scpred_softmax, scent_softmax, fcg_pred_softmax
+        # 合并 DPL 损失
+        dpl_losses_total = {}
+        if dpl_losses_batch:
+            for key in dpl_losses_batch[0].keys():
+                dpl_losses_total[key] = sum([d[key] for d in dpl_losses_batch])
+
+        return obj_logits, obj_preds, rel_logits, scpred_softmax, scent_softmax, fcg_pred_softmax, dpl_losses_total
 
 
 class HiKER(Module):
@@ -300,7 +338,7 @@ class HiKER(Module):
 
         # 调用 GGNN 进行预测，通过实例名调用 Callable 方法，也就是 forward 方法
         (result.rm_obj_dists, result.obj_preds, result.rel_dists,
-         result.scpred_softmax, result.scent_softmax, result.fcg_pred_softmax) = self.ggnn_rel_reason(
+         result.scpred_softmax, result.scent_softmax, result.fcg_pred_softmax, result.dpl_losses) = self.ggnn_rel_reason(
             im_inds=im_inds,
             obj_fmaps=result.obj_fmap,
             obj_logits=result.rm_obj_dists,
@@ -308,6 +346,7 @@ class HiKER(Module):
             rel_inds=rel_inds,
             obj_labels=result.rm_obj_labels if self.training or self.mode == 'predcls' else None,
             boxes_per_cls=result.boxes_all, # None
+            rel_labels=result.rel_labels if self.training else None,  # 传递 rel_labels
             fcg_rel_mask=result.fcg_rel_mask
         )
 

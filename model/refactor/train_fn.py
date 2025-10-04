@@ -65,6 +65,17 @@ def train_batch(model, conf, batch, optimizer, verbose=False):
         if USE_FCG:
             loss_fcg = model.fcg_loss(result)
             loss += loss_fcg
+
+        # ============== 添加 DPL 损失 ==============
+        loss_dpl_ortho = 0
+        loss_dpl_sample = 0
+        if hasattr(result, 'dpl_losses') and result.dpl_losses:
+            if 'ortho_loss' in result.dpl_losses:
+                loss_dpl_ortho = result.dpl_losses['ortho_loss']
+                loss += loss_dpl_ortho
+            if 'sample_loss' in result.dpl_losses:
+                loss_dpl_sample = result.dpl_losses['sample_loss']
+                loss += loss_dpl_sample
     forward_time = time_time() - forward_start
     logger.debug(f"前向传播总耗时: {forward_time:.4f}s")
     
@@ -84,5 +95,7 @@ def train_batch(model, conf, batch, optimizer, verbose=False):
         'loss_scpred': float(loss_scpred),
         'loss_scent': float(loss_scent),
         'loss_fcg': float(loss_fcg),
+        'loss_dpl_ortho': float(loss_dpl_ortho),
+        'loss_dpl_sample': float(loss_dpl_sample),
         'loss_total': float(loss),
     }
