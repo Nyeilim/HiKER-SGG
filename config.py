@@ -126,12 +126,12 @@ MODEL.LRGA.DROPOUT = None
 MODEL.USE_DPL = True  # 是否启用 DPL
 MODEL.DPL = Munch()
 MODEL.DPL.N_DIM = 128  # DPL 压缩特征维度
-MODEL.DPL.ALPHA = 0.1  # 采样损失权重
+MODEL.DPL.ALPHA = 0.1  # 采样损失权重（避免过大）
 MODEL.DPL.AVG_NUM_SAMPLE = 20  # 每个类别的平均采样数
 MODEL.DPL.RADIUS = 1.0  # 半径阈值
 MODEL.DPL.FREQ_BASED_DIFF_N = False  # 是否根据频率分配不同采样数
 MODEL.DPL.USE_IN_TEST = True  # 测试时是否使用 DPL
-MODEL.DPL.FUSION_WEIGHT = 0.2  # 测试时融合权重 (0: 只用原始, 1: 只用DPL) 80% GGNN + 20% DPL
+MODEL.DPL.FUSION_WEIGHT = 0.1  # 测试时融合权重 (90% GGNN + 10% DPL)
 # =============================================================================
 # 数据集中原始的 bbox 坐标使用的是 int 类型标注，它同图片像素点不是一一对应的关系，而是有个最大值 BOX_SCALE
 # 比如对于一个实际宽 592 的图片，它的 x 轴标注是 900，那么我们就可以通过 900*592/1024=520.3 得到这个 x 轴标注在真实图片上的位置

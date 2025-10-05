@@ -8,7 +8,6 @@ from torch import tensor as torch_tensor, float32 as torch_float32, cat as torch
     LongTensor as torch_LongTensor, log as torch_log, int64 as torch_int64
 from torch.cuda import current_device
 from torch.nn import Linear, Sequential, Module, AvgPool2d
-import torch.nn.functional as F
 from torch.nn.functional import softmax as F_softmax, nll_loss as F_nll_loss
 from torch.nn.parallel import replicate, parallel_apply
 from torchvision.ops import nms, roi_align
@@ -71,11 +70,11 @@ class GGNNRelReason(Module):
         self.use_dpl = MODEL.USE_DPL if hasattr(MODEL, 'USE_DPL') else False
         if self.use_dpl:
             self.dpl_classifier = DPLClassifier(
-                input_dim=hidden_dim,  # vr 经过 rel_proj 后的维度
-                num_rel_cls=num_rel_cls,
-                hidden_dim=MODEL.DPL.N_DIM
+                input_dim=hidden_dim,  # 512 (vr 经过 rel_proj 后的维度)
+                num_rel_cls=num_rel_cls,  # 51
+                hidden_dim=MODEL.DPL.N_DIM  # 128
             )
-            self.dpl_fusion_weight = MODEL.DPL.FUSION_WEIGHT
+            self.dpl_fusion_weight = MODEL.DPL.FUSION_WEIGHT  # 0.1 (90% GGNN + 10% DPL)
             print(f'[GGNNRelReason] DPL enabled with fusion_weight={self.dpl_fusion_weight}')
 
     # 这个 forward 方法是 Module 抽象类里面待实现的 Callable 方法
@@ -97,16 +96,10 @@ class GGNNRelReason(Module):
         scpred_softmax = []
         scent_softmax= []
         fcg_pred_softmax = []
-        dpl_losses_batch = []  # 收集 DPL 损失
-
+        dpl_losses_batch = []  # DPL损失收集
         for (_, obj_s, obj_e), (_, rel_s, rel_e) in zip(enumerate_by_image(im_inds.data), enumerate_by_image(rel_inds[:,0])):
-            # 调用 GGNN 内核（已恢复为原始版本）
-            rl, ol, scpred, scent = self.ggnn(
-                rel_inds[rel_s:rel_e, 1:] - obj_s,
-                obj_probs[obj_s:obj_e],
-                obj_fmaps[obj_s:obj_e],
-                vr[rel_s:rel_e]
-            )
+            # 调用 GGNN 内核，然后把前向传播的每个结果添加到前面的列表中。这里的返回值只有 rl scpred 有值
+            rl, ol, scpred, scent = self.ggnn(rel_inds[rel_s:rel_e, 1:] - obj_s, obj_probs[obj_s:obj_e], obj_fmaps[obj_s:obj_e], vr[rel_s:rel_e]) # 实际上是每次前向传播，是处理一张图片的数据
 
             # ========== DPL 独立分支 ==========
             if self.use_dpl:
@@ -123,13 +116,13 @@ class GGNNRelReason(Module):
                 if self.training and dpl_losses_img:
                     dpl_losses_batch.append(dpl_losses_img)
 
-                # 测试时在概率空间融合
+                # 测试时在概率空间融合 (90% GGNN + 10% DPL)
                 if not self.training:
-                    rl_prob = F.softmax(rl, dim=1)           # GGNN 概率分布
-                    dpl_prob = F.softmax(dpl_logits_img, dim=1)  # DPL 概率分布
+                    rl_prob = F_softmax(rl, dim=1)           # GGNN 概率分布
+                    dpl_prob = F_softmax(dpl_logits_img, dim=1)  # DPL 概率分布
 
                     # 概率空间加权融合
-                    w = self.dpl_fusion_weight
+                    w = self.dpl_fusion_weight  # 0.1
                     rl = (1 - w) * rl_prob + w * dpl_prob
             
             # # 获取当前图像的关系掩码
@@ -198,7 +191,7 @@ class GGNNRelReason(Module):
         else:
             obj_preds = obj_labels if obj_labels is not None else obj_probs[:,1:].max(1)[1] + 1 # PredCl 和 SGCl 任务不用做分类，直接拿真实标签作为 entity 的预测标签
 
-        # 合并 DPL 损失
+              # 合并 DPL 损失
         dpl_losses_total = {}
         if dpl_losses_batch:
             for key in dpl_losses_batch[0].keys():
@@ -358,8 +351,8 @@ class HiKER(Module):
             rel_inds=rel_inds,
             obj_labels=result.rm_obj_labels if self.training or self.mode == 'predcls' else None,
             boxes_per_cls=result.boxes_all, # None
-            rel_labels=result.rel_labels if self.training else None,  # 传递 rel_labels
-            fcg_rel_mask=result.fcg_rel_mask
+            fcg_rel_mask=result.fcg_rel_mask,
+            rel_labels=result.rel_labels if self.training else None
         )
 
         # 如果是训练，这里直接返回去算损失了；如果是测试/验证，会往下走算出具体的标签分布
