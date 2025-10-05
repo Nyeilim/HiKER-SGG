@@ -8,6 +8,7 @@ from torch import tensor as torch_tensor, float32 as torch_float32, cat as torch
     LongTensor as torch_LongTensor, log as torch_log, int64 as torch_int64
 from torch.cuda import current_device
 from torch.nn import Linear, Sequential, Module, AvgPool2d
+import torch.nn.functional as F
 from torch.nn.functional import softmax as F_softmax, nll_loss as F_nll_loss
 from torch.nn.parallel import replicate, parallel_apply
 from torchvision.ops import nms, roi_align
@@ -21,7 +22,8 @@ from model.pytorch_misc import onehot_logits, arange, enumerate_by_image, diagon
 from model.resnet import resnet_l4
 from model.surgery import filter_dets
 from model.feature.fcg_net import FCGNet, FCGNetV2
-from config import USE_FCG
+from model.feature.dpl_classifier import DPLClassifier
+from config import USE_FCG, MODEL
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -65,6 +67,17 @@ class GGNNRelReason(Module):
         # FCG 网络
         self.fcg_net = FCGNetV2()
 
+        # DPL 分类器 (独立分支)
+        self.use_dpl = MODEL.USE_DPL if hasattr(MODEL, 'USE_DPL') else False
+        if self.use_dpl:
+            self.dpl_classifier = DPLClassifier(
+                input_dim=hidden_dim,  # vr 经过 rel_proj 后的维度
+                num_rel_cls=num_rel_cls,
+                hidden_dim=MODEL.DPL.N_DIM
+            )
+            self.dpl_fusion_weight = MODEL.DPL.FUSION_WEIGHT
+            print(f'[GGNNRelReason] DPL enabled with fusion_weight={self.dpl_fusion_weight}')
+
     # 这个 forward 方法是 Module 抽象类里面待实现的 Callable 方法
     def forward(self, im_inds, obj_fmaps, obj_logits, rel_inds, vr, obj_labels=None, boxes_per_cls=None, fcg_rel_mask=None, rel_labels=None):
         """
@@ -87,38 +100,37 @@ class GGNNRelReason(Module):
         dpl_losses_batch = []  # 收集 DPL 损失
 
         for (_, obj_s, obj_e), (_, rel_s, rel_e) in zip(enumerate_by_image(im_inds.data), enumerate_by_image(rel_inds[:,0])):
-            # 获取当前图像的 rel_labels（仅训练时）
-            img_rel_labels = None
-            if self.training and rel_labels is not None:
-                img_rel_labels = rel_labels[rel_s:rel_e, -1]  # 只需要谓词标签（最后一列）
+            # 调用 GGNN 内核（已恢复为原始版本）
+            rl, ol, scpred, scent = self.ggnn(
+                rel_inds[rel_s:rel_e, 1:] - obj_s,
+                obj_probs[obj_s:obj_e],
+                obj_fmaps[obj_s:obj_e],
+                vr[rel_s:rel_e]
+            )
 
-            # 调用 GGNN 内核，然后把前向传播的每个结果添加到前面的列表中。这里的返回值只有 rl scpred 有值
-            if self.ggnn.use_dpl:
-                rl, ol, scpred, scent, dpl_logits_img, dpl_losses_img = self.ggnn(
-                    rel_inds[rel_s:rel_e, 1:] - obj_s,
-                    obj_probs[obj_s:obj_e],
-                    obj_fmaps[obj_s:obj_e],
-                    vr[rel_s:rel_e],
-                    img_rel_labels  # 传递 rel_labels
-                )
+            # ========== DPL 独立分支 ==========
+            if self.use_dpl:
+                # 提取当前图像的关系特征和标签
+                img_vr = vr[rel_s:rel_e]
+                img_rel_labels = None
+                if self.training and rel_labels is not None:
+                    img_rel_labels = rel_labels[rel_s:rel_e, -1]  # 谓词标签
 
-                # 收集 DPL 损失
+                # 调用独立的 DPL 分类器
+                dpl_logits_img, dpl_losses_img = self.dpl_classifier(img_vr, img_rel_labels)
+
+                # 训练时收集 DPL 损失
                 if self.training and dpl_losses_img:
                     dpl_losses_batch.append(dpl_losses_img)
 
-                # 测试时选择使用哪个 logits
-                if not self.training and self.ggnn.dpl_use_in_test:
-                    # 融合两者
-                    rl = (1 - self.ggnn.dpl_fusion_weight) * rl + \
-                         self.ggnn.dpl_fusion_weight * dpl_logits_img
-            else:
-                rl, ol, scpred, scent, _, _ = self.ggnn(
-                    rel_inds[rel_s:rel_e, 1:] - obj_s,
-                    obj_probs[obj_s:obj_e],
-                    obj_fmaps[obj_s:obj_e],
-                    vr[rel_s:rel_e],
-                    img_rel_labels  # 即使不用 DPL 也要传递，保持接口一致
-                )
+                # 测试时在概率空间融合
+                if not self.training:
+                    rl_prob = F.softmax(rl, dim=1)           # GGNN 概率分布
+                    dpl_prob = F.softmax(dpl_logits_img, dim=1)  # DPL 概率分布
+
+                    # 概率空间加权融合
+                    w = self.dpl_fusion_weight
+                    rl = (1 - w) * rl_prob + w * dpl_prob
             
             # # 获取当前图像的关系掩码
             # if USE_FCG:
