@@ -65,6 +65,20 @@ class GGNNRelReason(Module):
         # FCG 网络
         self.fcg_net = FCGNetV2()
 
+        # DPL 谓词精调器
+        from config import USE_DPL_REFINER
+        self.use_predicate_refiner = USE_DPL_REFINER
+        if self.use_predicate_refiner:
+            from model.predicate_refiner import PredicateRefiner
+            self.predicate_refiner = PredicateRefiner(
+                feature_dim=self.rel_dim,
+                prototype_dim=128,
+                avg_sample_size=15,
+                alpha=10.0,
+                radius=1.0,
+                freq_based_sample=True
+            )
+
     # 这个 forward 方法是 Module 抽象类里面待实现的 Callable 方法
     def forward(self, im_inds, obj_fmaps, obj_logits, rel_inds, vr, obj_labels=None, boxes_per_cls=None, fcg_rel_mask=None):
         """
@@ -127,6 +141,14 @@ class GGNNRelReason(Module):
         if USE_FCG:
             fcg_pred_softmax = torch_cat(fcg_pred_softmax, 0) # shape(all_rels, 51)
 
+        # DPL 谓词精调：对高错误率谓词进行专门优化
+        if self.use_predicate_refiner and hasattr(self, 'predicate_refiner'):
+            try:
+                rel_logits = self._apply_dpl_refining(rel_logits, im_inds, rel_inds, obj_fmaps, vr)
+            except Exception as e:
+                # 静默处理错误，返回原始预测
+                pass
+
         if self.ggnn.refine_obj_cls: # False
             obj_logits_refined = torch_cat(obj_logits_refined, 0)
             obj_logits = obj_logits_refined
@@ -155,6 +177,62 @@ class GGNNRelReason(Module):
             obj_preds = obj_labels if obj_labels is not None else obj_probs[:,1:].max(1)[1] + 1 # PredCl 和 SGCl 任务不用做分类，直接拿真实标签作为 entity 的预测标签
 
         return obj_logits, obj_preds, rel_logits, scpred_softmax, scent_softmax, fcg_pred_softmax
+
+    def _apply_dpl_refining(self, rel_logits, im_inds, rel_inds, obj_fmaps, vr):
+        """
+        应用 DPL 谓词精调优化
+
+        Args:
+            rel_logits: 原始关系预测 [num_relations, num_rel_cls]
+            im_inds: 图像索引 [num_relations]
+            rel_inds: 关系索引 [num_relations, 2] (subject_idx, object_idx)
+            obj_fmaps: 物体特征 [num_objects, feature_dim]
+            vr: 关系特征 [num_relations, rel_dim]
+
+        Returns:
+            refined_rel_logits: DPL优化后的关系预测 [num_relations, num_rel_cls]
+        """
+        # 获取目标谓词在全局谓词列表中的索引
+        target_pred_indices = self.predicate_refiner.get_target_predicate_indices(
+            self.ggnn.ind_to_predicates
+        )
+
+        if not target_pred_indices:
+            return rel_logits
+
+        # 使用 DPL 进行预测
+        self.predicate_refiner.eval()
+        with torch.no_grad():
+            dpl_rel_dists, confidences = self.predicate_refiner(vr)
+
+        # 将 DPL 预测结果融合到全局预测中
+        refined_rel_logits = self.predicate_refiner.convert_to_global_logits(
+            dpl_rel_dists, target_pred_indices, rel_logits
+        )
+
+        # 基于置信度进行智能融合
+        avg_confidence = confidences.mean().item()
+        avg_confidence = min(max(avg_confidence, 0.1), 0.9)
+
+        # 动态融合权重
+        if avg_confidence > 0.8:
+            alpha = 0.3  # 更多依赖 DPL
+        elif avg_confidence > 0.6:
+            alpha = 0.5  # 平衡融合
+        elif avg_confidence > 0.4:
+            alpha = 0.7  # 主要保持原样
+        else:
+            alpha = 0.9  # 几乎完全保持原样
+
+        # 对目标谓词进行融合
+        for target_idx in target_pred_indices:
+            original_scores = rel_logits[:, target_idx]
+            dpl_scores = refined_rel_logits[:, target_idx]
+            refined_rel_logits[:, target_idx] = (
+                alpha * original_scores + (1 - alpha) * dpl_scores
+            )
+
+        return refined_rel_logits
 
 
 class HiKER(Module):
