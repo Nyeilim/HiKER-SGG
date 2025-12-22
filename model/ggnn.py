@@ -210,6 +210,7 @@ class GGNN(Module):
         # 新增上下文感知的桥边初始化器
         self.context_prior = None  # 延迟初始化，等待edge_matrix
 
+        
     def forward(self, rel_inds, obj_probs, obj_fmaps, vr):
         """
         GGNN Rules 内核
@@ -400,4 +401,4 @@ class GGNN(Module):
         if refine_obj_cls:  # False
             ent_cls_score, scent_cls_score = hierarchical_ent_reasoning(ent_cls_logits)
 
-        return pred_cls_score, ent_cls_score, scpred_cls_score, scent_cls_score
+        return pred_cls_score, ent_cls_score, scpred_cls_score, scent_cls_score, nodes_img_pred

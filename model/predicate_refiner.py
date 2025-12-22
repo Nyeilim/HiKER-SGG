@@ -7,37 +7,35 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import json
-import pickle
 from torch.cuda import current_device
 
 from config import VG_SGG_DICT_FN
-from torch.cuda import current_device
 
 CUDA_DEVICE = torch.device(f'cuda:{current_device()}')
 
-# 基于 requires.md 的前10个高错误率谓词
-TOP_ERROR_PREDICATES = {
-    'flying in': {'error_rate': 1.0000, 'sample_count': 25},
-    'lying on': {'error_rate': 1.0000, 'sample_count': 170},
-    'walking in': {'error_rate': 0.9381, 'sample_count': 113},
-    'mounted on': {'error_rate': 0.9290, 'sample_count': 169},
-    'part of': {'error_rate': 0.9085, 'sample_count': 142},
-    'playing': {'error_rate': 0.8966, 'sample_count': 29},
-    'on': {'error_rate': 0.8836, 'sample_count': 63023},
-    'says': {'error_rate': 0.8333, 'sample_count': 12},
-    'above': {'error_rate': 0.8300, 'sample_count': 2388},
-    'across': {'error_rate': 0.8171, 'sample_count': 82},
-}
+# 需要优化的目标谓词列表
+TARGET_PREDICATES = [
+    'flying in',
+    'lying on',
+    'walking in',
+    'mounted on',
+    'part of',
+    'playing',
+    'on',
+    'says',
+    'above',
+    'across',
+]
 
 
 class PredicateRefiner(nn.Module):
     """
     基于 DPL (Semantic Diversity-aware Prototype-based Learning) 的谓词精调器
-    针对高错误率谓词进行专门优化，使用高斯分布参数化和多样性感知损失
+    针对指定谓词进行专门优化，使用高斯分布参数化和多样性感知损失
+    直接输出概率分布用于融合
     """
-    def __init__(self, feature_dim=4096, prototype_dim=128, avg_sample_size=20,
-                 alpha=10.0, radius=1.0, freq_based_sample=True,
-                 temperature=2.0, logit_range=(-10, 10)):
+    def __init__(self, feature_dim=1024, prototype_dim=128, avg_sample_size=20,
+                 alpha=10.0, radius=1.0):
         super(PredicateRefiner, self).__init__()
 
         self.feature_dim = feature_dim
@@ -45,18 +43,13 @@ class PredicateRefiner(nn.Module):
         self.avg_sample_size = avg_sample_size
         self.alpha = alpha
         self.radius = radius
-        self.temperature = temperature  # 温度参数，控制输出尖锐度
-        self.logit_min, self.logit_max = logit_range  # logits范围限制
 
         # 加载谓词字典
         self.predicate_dict_loader = PredicateDictLoader()
 
         # 目标谓词列表
-        self.target_predicates = list(TOP_ERROR_PREDICATES.keys())
+        self.target_predicates = TARGET_PREDICATES
         self.num_target_predicates = len(self.target_predicates)
-
-        # 创建谓词到索引的映射
-        self.target_predicate_to_idx = {pred: idx for idx, pred in enumerate(self.target_predicates)}
 
         # 特征投影层：将输入特征投影到原型空间
         self.feature_projector = nn.Linear(feature_dim, prototype_dim)
@@ -75,11 +68,8 @@ class PredicateRefiner(nn.Module):
         self.negative_scale = nn.Parameter(torch.ones(1) * 15)
         self.shift = nn.Parameter(torch.ones(1) * 15)
 
-        # 自适应采样大小
-        if freq_based_sample:
-            self.sample_size_array = self._compute_adaptive_sample_size()
-        else:
-            self.sample_size_array = torch.ones(self.num_target_predicates, dtype=torch.int32) * avg_sample_size
+        # 固定采样大小
+        self.sample_size_array = torch.ones(self.num_target_predicates, dtype=torch.int32) * avg_sample_size
 
         # 损失计算器
         self.loss_calculator = DPLossCalculator(alpha=alpha, radius=radius)
@@ -87,24 +77,7 @@ class PredicateRefiner(nn.Module):
         # 初始化参数
         self._init_parameters()
 
-    def _compute_adaptive_sample_size(self):
-        """基于错误率计算自适应采样大小"""
-        # 使用错误率作为"频率"的代理，错误率越高说明样本越少
-        error_rates = [TOP_ERROR_PREDICATES[pred]['error_rate'] for pred in self.target_predicates]
-        error_rates = np.array(error_rates)
-
-        # 避免log(0)
-        error_rates = np.maximum(error_rates, 0.01)
-
-        # 基于错误率的对数计算采样大小
-        log_error = np.log(error_rates)
-        mean_log_error = np.mean(log_error)
-
-        sample_sizes = np.round(log_error / mean_log_error * self.avg_sample_size).astype(int)
-        sample_sizes = np.maximum(sample_sizes, 1)  # 确保至少采样1个
-
-        return torch.tensor(sample_sizes, dtype=torch.int32)
-
+    
     def _init_parameters(self):
         """初始化网络参数"""
         nn.init.xavier_uniform_(self.feature_projector.weight)
@@ -112,26 +85,48 @@ class PredicateRefiner(nn.Module):
         nn.init.xavier_uniform_(self.gaussian_emb.weight)
         nn.init.constant_(self.gaussian_emb.bias, 0)
 
-    def forward(self, features, subject_indices=None, object_indices=None, predicate_indices=None, target_labels=None):
+    def forward(self, features, target_labels=None):
         """
         前向传播
 
         Args:
             features: 关系特征 [num_relations, feature_dim]
-            subject_indices: 主语索引 [num_relations] (保留接口兼容性)
-            object_indices: 宾语索引 [num_relations] (保留接口兼容性)
-            predicate_indices: 谓词索引 [num_relations] (保留接口兼容性)
-            target_labels: 训练时的真实标签 [num_relations] (可选)
+            target_labels: 训练时的真实标签 [num_relations] (可选，使用VG真实索引)
 
         Returns:
-            训练时: (rel_dists, loss_dict)
-            推理时: (rel_dists, confidences)
+            训练时: (rel_probs, loss_dict, valid_mask)
+            推理时: (rel_probs, confidences, valid_mask)
         """
         num_relations = features.shape[0]
         device = features.device
 
+        # 获取目标谓词的真实索引
+        target_indices = self.get_target_predicate_indices()
+        target_idx_set = set(target_indices)
+
+        # 创建掩码：标记哪些关系是我们的目标谓词
+        if target_labels is not None:
+            # 训练时：根据target_labels过滤
+            valid_mask = torch.tensor([label.item() in target_idx_set for label in target_labels],
+                                    device=device, dtype=torch.bool)
+        else:
+            # 推理时：处理所有关系
+            valid_mask = torch.ones(num_relations, device=device, dtype=torch.bool)
+
+        if not valid_mask.any():
+            # 如果没有目标谓词，返回空结果
+            empty_probs = torch.zeros(num_relations, self.num_target_predicates, device=device)
+            empty_confidences = torch.zeros(num_relations, device=device)
+            if self.training and target_labels is not None:
+                return empty_probs, {}, valid_mask
+            else:
+                return empty_probs, empty_confidences, valid_mask
+
+        # 只对有效关系进行处理
+        valid_features = features[valid_mask]  # [num_valid, feature_dim]
+
         # 投影特征到原型空间
-        projected_features = self.feature_projector(features)  # [num_relations, prototype_dim]
+        projected_features = self.feature_projector(valid_features)  # [num_valid, prototype_dim]
 
         # 获取原型参数
         prototypes = self.prototype_emb  # [num_target_predicates, prototype_dim]
@@ -146,43 +141,47 @@ class PredicateRefiner(nn.Module):
 
         # 计算距离矩阵
         rel_rep_expand = projected_features_norm.unsqueeze(1).expand(-1, self.num_target_predicates, -1)
-        prototype_expand = prototypes_norm.unsqueeze(0).expand(num_relations, -1, -1)
+        prototype_expand = prototypes_norm.unsqueeze(0).expand(projected_features_norm.shape[0], -1, -1)
 
         # 计算加权距离 (考虑高斯分布的不确定性)
         distance_set = (rel_rep_expand - prototype_expand).norm(dim=2)
 
         # 使用负缩放和偏移转换为相似度分数
-        if self.training:
-            # 训练时使用标准距离
-            rel_dists = -self.negative_scale * distance_set + self.shift
-        else:
-            # 推理时使用归一化距离
-            nd = distance_set / logsigma.exp().max(dim=1)[0].unsqueeze(0)
-            ndn = (nd.t() / nd.max(dim=1)[0] * distance_set.max(dim=1)[0]).t()
-            rel_dists = -self.negative_scale * ndn + self.shift
+        rel_scores = -self.negative_scale * distance_set + self.shift
 
-        # 关键：将DPL输出转换为概率，然后再转换为对齐的logits
-        dpl_probabilities = F.softmax(rel_dists, dim=1)  # [num_relations, 10], 范围: 0~1
-
-        # 将概率转换回logits空间，模拟原始分类器的数量级
-        # 使用温度参数控制输出的"尖锐度"
-        aligned_logits = torch.log(dpl_probabilities + 1e-8) / self.temperature
-
-        # 缩放到合理的logits范围，与原始分类器对齐
-        aligned_logits = torch.clamp(aligned_logits, min=self.logit_min, max=self.logit_max)
+        # 直接转换为概率分布输出
+        valid_rel_probs = F.softmax(rel_scores, dim=1)  # [num_valid, num_target_predicates], 范围: 0~1
 
         # 计算置信度（基于最大概率）
-        confidences = dpl_probabilities.max(dim=1)[0]
+        valid_confidences = valid_rel_probs.max(dim=1)[0]
+
+        # 创建完整的输出张量
+        rel_probs = torch.zeros(num_relations, self.num_target_predicates, device=device)
+        rel_probs[valid_mask] = valid_rel_probs
 
         if self.training and target_labels is not None:
-            # 训练时：返回原始距离用于损失计算，但对齐的logits用于融合
+            # 训练时：需要转换标签
+            valid_target_labels = target_labels[valid_mask]
+            internal_labels = []
+            for vg_idx in valid_target_labels:
+                pred_name = self.predicate_dict_loader.idx_to_predicate.get(int(vg_idx), None)
+                if pred_name in self.target_predicates:
+                    internal_labels.append(self.target_predicates.index(pred_name))
+                else:
+                    internal_labels.append(0)  # 默认值，虽然理论上不应该发生
+
+            internal_labels = torch.tensor(internal_labels, device=device)
+
+            # 计算损失
             loss_dict = self._compute_dpl_losses(
-                projected_features, prototypes_norm, logsigma, target_labels
+                projected_features, prototypes_norm, logsigma, internal_labels
             )
-            return aligned_logits, loss_dict
+            return rel_probs, loss_dict, valid_mask
         else:
-            # 推理时：返回对齐的logits和置信度
-            return aligned_logits, confidences
+            # 推理时：返回概率和置信度
+            confidences = torch.zeros(num_relations, device=device)
+            confidences[valid_mask] = valid_confidences
+            return rel_probs, confidences, valid_mask
 
     def _compute_dpl_losses(self, features, prototypes, logsigma, target_labels):
         """计算DPL的各个损失项"""
@@ -201,42 +200,105 @@ class PredicateRefiner(nn.Module):
 
         return loss_dict
 
-    def get_target_predicate_indices(self, ind_to_predicates):
+    def get_target_predicate_indices(self):
         """
-        获取目标谓词在完整谓词列表中的索引
+        获取目标谓词在VG数据集中的真实索引
         """
+        # 直接使用谓词字典中的真实索引
         target_indices = []
         for pred_name in self.target_predicates:
-            if pred_name in ind_to_predicates:
-                idx = ind_to_predicates.index(pred_name)
-                target_indices.append(idx)
+            if pred_name in self.predicate_dict_loader.predicate_to_idx:
+                real_idx = self.predicate_dict_loader.predicate_to_idx[pred_name]
+                target_indices.append(real_idx)
 
         return target_indices
 
-    def convert_to_global_logits(self, dpl_rel_dists, pred_indices, global_rel_logits):
+    def apply_dpl_and_fuse(self, original_input, enhanced_features, target_labels=None):
         """
-        将DPL的预测结果转换到全局的51维谓词空间
+        应用 DPL 优化并融合到原始预测中
 
         Args:
-            dpl_rel_dists: DPL预测的分数 [num_relations, num_target_predicates]
-            pred_indices: 目标谓词在全局空间中的索引
-            global_rel_logits: 全局的原始预测 [num_relations, 51]
+            original_input: 原始关系预测 logits 或概率 [num_relations, num_rel_cls]
+            enhanced_features: GGNN语义增强后的特征 [num_relations, feature_dim]
+            target_labels: 训练时的真实谓词标签 [num_relations] (可选)
 
         Returns:
-            updated_global_logits: 更新后的全局预测
+            fused_logits: DPL优化融合后的关系预测 [num_relations, num_rel_cls]
+            loss_dict: DPL损失字典 (训练时返回)
         """
-        if pred_indices is None or len(pred_indices) == 0:
-            return global_rel_logits
+        # 获取目标谓词索引
+        target_indices = self.get_target_predicate_indices()
 
-        updated_logits = global_rel_logits.clone()
+        if not target_indices:
+            return original_input
 
-        # 将DPL的预测结果更新到对应的谓词位置
-        for i, global_idx in enumerate(pred_indices):
-            if global_idx < global_rel_logits.shape[1]:
-                # 使用DPL预测替换对应谓词的分数
-                updated_logits[:, global_idx] = dpl_rel_dists[:, i]
+        # 使用增强后的关系特征进行 DPL 优化
+        if self.training and target_labels is not None:
+            # 训练模式：前向传播并计算损失
+            dpl_rel_probs, loss_dict, valid_mask = self(enhanced_features, target_labels=target_labels)
+            confidences = None  # 训练时不需要置信度
+        else:
+            # 推理模式：禁用梯度
+            self.eval()
+            with torch.no_grad():
+                dpl_rel_probs, confidences, _ = self(enhanced_features)
+            loss_dict = None
 
-        return updated_logits
+        # 转换 DPL 预测到全局概率空间
+        dpl_global_probs = torch.zeros_like(original_input)
+        for i, global_idx in enumerate(target_indices):
+            if global_idx < original_input.shape[1]:
+                dpl_global_probs[:, global_idx] = dpl_rel_probs[:, i]
+
+        # 直接使用概率空间（输入已经是概率）
+        original_probs = original_input
+
+        # 每个关系单独进行概率空间加权
+        fused_probs = original_probs.clone()
+
+        # 使用每个关系的单独置信度（训练和推理统一）
+        for i in range(original_probs.shape[0]):
+            if self.training:
+                # 训练时：由于没有置信度，使用默认的保守策略
+                alpha = 0.9  # 主要保持原样，给DPL轻微的学习机会
+            else:
+                # 推理时：基于置信度决定是否使用DPL
+                confidence = confidences[i].item()
+
+                # 置信度太低，直接忽略DPL结果
+                if confidence < 0.2:
+                    continue  # 跳过DPL融合，保持原始预测
+
+                # 置信度足够高，进行融合（只做上界限制）
+                confidence = min(confidence, 0.9)
+
+                # 动态融合权重（基于该关系的置信度）
+                if confidence > 0.8:
+                    alpha = 0.3  # 更多依赖 DPL
+                elif confidence > 0.6:
+                    alpha = 0.5  # 平衡融合
+                elif confidence > 0.4:
+                    alpha = 0.7  # 主要保持原样
+                else:
+                    alpha = 0.9  # 低置信度但可用，主要保持原样
+
+            # 对该关系进行概率空间融合
+            for target_idx in target_indices:
+                fused_probs[i, target_idx] = (
+                    alpha * original_probs[i, target_idx] +
+                    (1 - alpha) * dpl_global_probs[i, target_idx]
+                )
+
+        # 重新归一化每一行，确保概率和为1
+        fused_probs = fused_probs / fused_probs.sum(dim=1, keepdim=True)
+
+        # 转换回 logits 空间
+        fused_logits = torch.log(fused_probs + 1e-8)
+
+        if self.training and target_labels is not None:
+            return fused_logits, loss_dict
+        else:
+            return fused_logits
 
 
 class PredicateDictLoader:
@@ -315,66 +377,3 @@ class DPLossCalculator:
             return self.alpha * (total_loss / count)
         else:
             return torch.tensor(0.0, device=device, requires_grad=True)
-
-
-def test_predicate_refiner():
-    """测试 DPL 谓词精调器"""
-    print("Testing DPL PredicateRefiner...")
-
-    # 测试参数
-    batch_size = 5
-    feature_dim = 4096
-    prototype_dim = 128
-
-    # 创建测试数据
-    features = torch.randn(batch_size, feature_dim).to(CUDA_DEVICE)
-    target_labels = torch.randint(0, 10, (batch_size,)).to(CUDA_DEVICE)  # 目标谓词索引 (0-9)
-
-    # 创建 DPL 精调器
-    refiner = PredicateRefiner(
-        feature_dim=feature_dim,
-        prototype_dim=prototype_dim,
-        avg_sample_size=10,
-        alpha=5.0,
-        radius=0.5
-    ).to(CUDA_DEVICE)
-
-    # 测试推理模式
-    print("\n=== Inference Mode Test ===")
-    refiner.eval()
-    with torch.no_grad():
-        rel_dists, confidences = refiner(features)
-
-    print(f"Input features shape: {features.shape}")
-    print(f"Output rel_dists shape: {rel_dists.shape}")
-    print(f"Confidences shape: {confidences.shape}")
-    print(f"Target predicates: {refiner.target_predicates}")
-    print(f"Sample sizes: {refiner.sample_size_array}")
-    print(f"Confidence range: [{confidences.min().item():.3f}, {confidences.max().item():.3f}]")
-
-    # 测试训练模式
-    print("\n=== Training Mode Test ===")
-    refiner.train()
-    rel_dists_train, loss_dict = refiner(features, target_labels=target_labels)
-
-    print(f"Training rel_dists shape: {rel_dists_train.shape}")
-    print(f"Losses: {[(k, v.item()) for k, v in loss_dict.items()]}")
-
-    # 验证原型嵌入
-    print(f"\nPrototype embedding shape: {refiner.prototype_emb.shape}")
-    print(f"Gaussian embedding output shape: {refiner.gaussian_emb(refiner.prototype_emb).shape}")
-
-    # 测试全局logits转换
-    global_logits = torch.randn(batch_size, 51).to(CUDA_DEVICE)
-    target_indices = refiner.get_target_predicate_indices(list(refiner.predicate_dict_loader.idx_to_predicate.values()))
-    updated_logits = refiner.convert_to_global_logits(rel_dists, target_indices, global_logits)
-
-    print(f"Global logits shape: {global_logits.shape}")
-    print(f"Updated logits shape: {updated_logits.shape}")
-    print(f"Target predicate indices: {target_indices}")
-
-    print("DPL PredicateRefiner test completed successfully!")
-
-
-if __name__ == "__main__":
-    test_predicate_refiner()

@@ -65,20 +65,6 @@ class GGNNRelReason(Module):
         # FCG 网络
         self.fcg_net = FCGNetV2()
 
-        # DPL 谓词精调器
-        from config import USE_DPL_REFINER
-        self.use_predicate_refiner = USE_DPL_REFINER
-        if self.use_predicate_refiner:
-            from model.predicate_refiner import PredicateRefiner
-            self.predicate_refiner = PredicateRefiner(
-                feature_dim=self.rel_dim,
-                prototype_dim=128,
-                avg_sample_size=15,
-                alpha=10.0,
-                radius=1.0,
-                freq_based_sample=True
-            )
-
     # 这个 forward 方法是 Module 抽象类里面待实现的 Callable 方法
     def forward(self, im_inds, obj_fmaps, obj_logits, rel_inds, vr, obj_labels=None, boxes_per_cls=None, fcg_rel_mask=None):
         """
@@ -98,9 +84,13 @@ class GGNNRelReason(Module):
         scpred_softmax = []
         scent_softmax= []
         fcg_pred_softmax = []
+        enhanced_vr_list = []  # 收集增强后的关系特征
+
         for (_, obj_s, obj_e), (_, rel_s, rel_e) in zip(enumerate_by_image(im_inds.data), enumerate_by_image(rel_inds[:,0])):
             # 调用 GGNN 内核，然后把前向传播的每个结果添加到前面的列表中。这里的返回值只有 rl scpred 有值
-            rl, ol, scpred, scent = self.ggnn(rel_inds[rel_s:rel_e, 1:] - obj_s, obj_probs[obj_s:obj_e], obj_fmaps[obj_s:obj_e], vr[rel_s:rel_e]) # 实际上是每次前向传播，是处理一张图片的数据
+            rl, ol, scpred, scent, enhanced_vr = self.ggnn(rel_inds[rel_s:rel_e, 1:] - obj_s, obj_probs[obj_s:obj_e], obj_fmaps[obj_s:obj_e], vr[rel_s:rel_e]) # 实际上是每次前向传播，是处理一张图片的数据
+
+            enhanced_vr_list.append(enhanced_vr)  # 收集增强后的关系特征
             
             # # 获取当前图像的关系掩码
             # if USE_FCG:
@@ -141,13 +131,9 @@ class GGNNRelReason(Module):
         if USE_FCG:
             fcg_pred_softmax = torch_cat(fcg_pred_softmax, 0) # shape(all_rels, 51)
 
-        # DPL 谓词精调：对高错误率谓词进行专门优化
-        if self.use_predicate_refiner and hasattr(self, 'predicate_refiner'):
-            try:
-                rel_logits = self._apply_dpl_refining(rel_logits, im_inds, rel_inds, obj_fmaps, vr)
-            except Exception as e:
-                # 静默处理错误，返回原始预测
-                pass
+        # 合并所有增强后的关系特征
+        enhanced_vr_all = torch_cat(enhanced_vr_list, 0)  # shape(all_rels, 512)
+
 
         if self.ggnn.refine_obj_cls: # False
             obj_logits_refined = torch_cat(obj_logits_refined, 0)
@@ -178,62 +164,7 @@ class GGNNRelReason(Module):
 
         return obj_logits, obj_preds, rel_logits, scpred_softmax, scent_softmax, fcg_pred_softmax
 
-    def _apply_dpl_refining(self, rel_logits, im_inds, rel_inds, obj_fmaps, vr):
-        """
-        应用 DPL 谓词精调优化
-
-        Args:
-            rel_logits: 原始关系预测 [num_relations, num_rel_cls]
-            im_inds: 图像索引 [num_relations]
-            rel_inds: 关系索引 [num_relations, 2] (subject_idx, object_idx)
-            obj_fmaps: 物体特征 [num_objects, feature_dim]
-            vr: 关系特征 [num_relations, rel_dim]
-
-        Returns:
-            refined_rel_logits: DPL优化后的关系预测 [num_relations, num_rel_cls]
-        """
-        # 获取目标谓词在全局谓词列表中的索引
-        target_pred_indices = self.predicate_refiner.get_target_predicate_indices(
-            self.ggnn.ind_to_predicates
-        )
-
-        if not target_pred_indices:
-            return rel_logits
-
-        # 使用 DPL 进行预测
-        self.predicate_refiner.eval()
-        with torch.no_grad():
-            dpl_rel_dists, confidences = self.predicate_refiner(vr)
-
-        # 将 DPL 预测结果融合到全局预测中
-        refined_rel_logits = self.predicate_refiner.convert_to_global_logits(
-            dpl_rel_dists, target_pred_indices, rel_logits
-        )
-
-        # 基于置信度进行智能融合
-        avg_confidence = confidences.mean().item()
-        avg_confidence = min(max(avg_confidence, 0.1), 0.9)
-
-        # 动态融合权重
-        if avg_confidence > 0.8:
-            alpha = 0.3  # 更多依赖 DPL
-        elif avg_confidence > 0.6:
-            alpha = 0.5  # 平衡融合
-        elif avg_confidence > 0.4:
-            alpha = 0.7  # 主要保持原样
-        else:
-            alpha = 0.9  # 几乎完全保持原样
-
-        # 对目标谓词进行融合
-        for target_idx in target_pred_indices:
-            original_scores = rel_logits[:, target_idx]
-            dpl_scores = refined_rel_logits[:, target_idx]
-            refined_rel_logits[:, target_idx] = (
-                alpha * original_scores + (1 - alpha) * dpl_scores
-            )
-
-        return refined_rel_logits
-
+    
 
 class HiKER(Module):
     """
@@ -316,6 +247,19 @@ class HiKER(Module):
                                              config=config,
                                              )
 
+        # DPL 谓词精调器
+        from config import USE_DPL_REFINER
+        self.use_predicate_refiner = USE_DPL_REFINER
+        if self.use_predicate_refiner:
+            from model.predicate_refiner import PredicateRefiner
+            self.predicate_refiner = PredicateRefiner(
+                feature_dim=ggnn_rel_hidden_dim,  # 使用 GGNN 隐藏层维度 (512)
+                prototype_dim=128,
+                avg_sample_size=15,
+                alpha=10.0,
+                radius=1.0
+            )
+
         if rel_counts_path is not None:
             with open(rel_counts_path, 'rb') as fin:
                 rel_counts = pickle.load(fin)
@@ -378,7 +322,7 @@ class HiKER(Module):
 
         # 调用 GGNN 进行预测，通过实例名调用 Callable 方法，也就是 forward 方法
         (result.rm_obj_dists, result.obj_preds, result.rel_dists,
-         result.scpred_softmax, result.scent_softmax, result.fcg_pred_softmax) = self.ggnn_rel_reason(
+         result.scpred_softmax, result.scent_softmax, result.fcg_pred_softmax, result.enhanced_vr) = self.ggnn_rel_reason(
             im_inds=im_inds,
             obj_fmaps=result.obj_fmap,
             obj_logits=result.rm_obj_dists,
@@ -388,6 +332,19 @@ class HiKER(Module):
             boxes_per_cls=result.boxes_all, # None
             fcg_rel_mask=result.fcg_rel_mask
         )
+
+        # DPL 谓词精调：在 HiKER 主模型中集成 DPL
+        if hasattr(self, 'predicate_refiner'):
+            if self.training:
+                # 训练模式：使用增强特征和真实标签
+                result.rel_dists, result.dpl_loss = self.predicate_refiner.apply_dpl_and_fuse(
+                    result.rel_dists, result.enhanced_vr, target_labels=result.rel_labels[:, -1]
+                )
+            else:
+                # 推理模式：只使用增强特征
+                result.rel_dists = self.predicate_refiner.apply_dpl_and_fuse(
+                    result.rel_dists, result.enhanced_vr
+                )
 
         # 如果是训练，这里直接返回去算损失了；如果是测试/验证，会往下走算出具体的标签分布
         if self.training:
@@ -493,6 +450,18 @@ class HiKER(Module):
     def rel_loss(self, result):  # 这里做损失的 rel_dists 已经是经过 Softmax 后的，torch.sum(rel_dists[0]) == 1，所以直接过 Log 再过 NLL 就好
         return F_nll_loss(torch_log(result.rel_dists + 1e-10), result.rel_labels[:, -1],
                           weight=self.rel_class_weights)  # rel_class_weights.shape(51,) 目前来看它是个全为 1 的权值列表，负责对谓词的重要程度进行加权
+
+    def dpl_loss(self, result):
+        """计算 DPL 谓词精调损失"""
+        if hasattr(result, 'dpl_loss') and result.dpl_loss is not None:
+            # 合并所有 DPL 损失项
+            total_loss = 0.0
+            for loss_name, loss_value in result.dpl_loss.items():
+                if isinstance(loss_value, torch.Tensor):
+                    total_loss += loss_value
+            return total_loss
+        else:
+            return torch_zeros(1, requires_grad=False, device=CURRENT_DEVICE, dtype=torch_float32)
 
     def scpred_loss(self, result):
         scpred_label = torch_zeros((result.scpred_softmax.shape[0]), requires_grad=False).type(torch_LongTensor).to(CURRENT_DEVICE)
