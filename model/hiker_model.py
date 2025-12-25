@@ -162,7 +162,7 @@ class GGNNRelReason(Module):
         else:
             obj_preds = obj_labels if obj_labels is not None else obj_probs[:,1:].max(1)[1] + 1 # PredCl 和 SGCl 任务不用做分类，直接拿真实标签作为 entity 的预测标签
 
-        return obj_logits, obj_preds, rel_logits, scpred_softmax, scent_softmax, fcg_pred_softmax
+        return obj_logits, obj_preds, rel_logits, scpred_softmax, scent_softmax, fcg_pred_softmax, enhanced_vr_all
 
     
 
@@ -338,7 +338,7 @@ class HiKER(Module):
             if self.training:
                 # 训练模式：使用增强特征和真实标签
                 result.rel_dists, result.dpl_loss = self.predicate_refiner.apply_dpl_and_fuse(
-                    result.rel_dists, result.enhanced_vr, target_labels=result.rel_labels[:, -1]
+                    result.rel_dists, result.enhanced_vr.detach(), target_labels=result.rel_labels[:, -1]
                 )
             else:
                 # 推理模式：只使用增强特征

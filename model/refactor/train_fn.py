@@ -65,6 +65,13 @@ def train_batch(model, conf, batch, optimizer, verbose=False):
         if USE_FCG:
             loss_fcg = model.fcg_loss(result)
             loss += loss_fcg
+        
+        # 添加 DPL 谓词精调损失
+        loss_dpl = 0
+        if hasattr(result, 'dpl_loss') and result.dpl_loss is not None:
+            loss_dpl = model.dpl_loss(result)
+            loss += 0.001 * loss_dpl  # DPL权重系数，平衡损失量级
+
     forward_time = time_time() - forward_start
     logger.debug(f"前向传播总耗时: {forward_time:.4f}s")
     
@@ -84,5 +91,6 @@ def train_batch(model, conf, batch, optimizer, verbose=False):
         'loss_scpred': float(loss_scpred),
         'loss_scent': float(loss_scent),
         'loss_fcg': float(loss_fcg),
+        'loss_dpl': float(loss_dpl),
         'loss_total': float(loss),
     }

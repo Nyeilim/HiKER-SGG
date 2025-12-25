@@ -7,11 +7,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import json
-from torch.cuda import current_device
 
 from config import VG_SGG_DICT_FN
-
-CUDA_DEVICE = torch.device(f'cuda:{current_device()}')
 
 # 需要优化的目标谓词列表
 TARGET_PREDICATES = [
@@ -73,6 +70,12 @@ class PredicateRefiner(nn.Module):
 
         # 损失计算器
         self.loss_calculator = DPLossCalculator(alpha=alpha, radius=radius)
+
+        # 预计算标签映射缓存，加速训练
+        self.vg_idx_to_internal_cache = {}
+        for vg_idx, pred_name in self.predicate_dict_loader.idx_to_predicate.items():
+            if pred_name in self.target_predicates:
+                self.vg_idx_to_internal_cache[int(vg_idx)] = self.target_predicates.index(pred_name)
 
         # 初始化参数
         self._init_parameters()
@@ -149,6 +152,28 @@ class PredicateRefiner(nn.Module):
         # 使用负缩放和偏移转换为相似度分数
         rel_scores = -self.negative_scale * distance_set + self.shift
 
+        # 推理时：使用标准差进行归一化（与原始DPL一致）
+        if not self.training:
+            # 使用标准差归一化距离，让不确定性高的原型有更大的容忍度
+            # logsigma: [num_target_predicates, prototype_dim]
+            # 需要扩展到与 (rel_rep_expand - prototype_expand) 相同的维度进行除法
+            logsigma_exp = logsigma.exp()  # [num_target_predicates, prototype_dim]
+
+            # 计算归一化距离: (rel_rep - prototype) / sigma
+            # [num_valid, num_target_predicates, prototype_dim] / [num_target_predicates, prototype_dim]
+            # 自动broadcast到 [num_valid, num_target_predicates, prototype_dim]
+            rel_rep_div = (rel_rep_expand - prototype_expand) / logsigma_exp.unsqueeze(0)
+            nd = rel_rep_div.norm(dim=2)  # [num_valid, num_target_predicates]
+
+            # 归一化调整 (保持与原始距离的尺度一致)
+            # 添加数值稳定性：防止除以0
+            nd_max = nd.max(dim=1)[0]
+            nd_max = torch.where(nd_max > 0, nd_max, torch.ones_like(nd_max))
+            distance_max = distance_set.max(dim=1)[0]
+
+            ndn = (nd.t() / nd_max * distance_max).t()
+            rel_scores = -self.negative_scale * ndn + self.shift
+
         # 直接转换为概率分布输出
         valid_rel_probs = F.softmax(rel_scores, dim=1)  # [num_valid, num_target_predicates], 范围: 0~1
 
@@ -160,17 +185,37 @@ class PredicateRefiner(nn.Module):
         rel_probs[valid_mask] = valid_rel_probs
 
         if self.training and target_labels is not None:
-            # 训练时：需要转换标签
+            # 训练时：需要转换标签（使用缓存加速）
             valid_target_labels = target_labels[valid_mask]
             internal_labels = []
             for vg_idx in valid_target_labels:
-                pred_name = self.predicate_dict_loader.idx_to_predicate.get(int(vg_idx), None)
-                if pred_name in self.target_predicates:
-                    internal_labels.append(self.target_predicates.index(pred_name))
+                idx = int(vg_idx)
+                # 由于 valid_mask 已经过滤，这里理论上应该总能找到映射
+                # 如果找不到，说明存在数据不一致，需要警告
+                if idx in self.vg_idx_to_internal_cache:
+                    internal_labels.append(self.vg_idx_to_internal_cache[idx])
                 else:
-                    internal_labels.append(0)  # 默认值，虽然理论上不应该发生
+                    # fallback: 尝试动态查找
+                    pred_name = self.predicate_dict_loader.idx_to_predicate.get(idx, None)
+                    if pred_name and pred_name in self.target_predicates:
+                        internal_labels.append(self.target_predicates.index(pred_name))
+                    else:
+                        # 如果还是找不到，说明数据有问题，使用-1标记（后续过滤）
+                        # 这种情况下应该不会发生，因为valid_mask已经过滤了
+                        import warnings
+                        warnings.warn(f"Cannot find predicate mapping for VG index {idx}, skipping")
+                        internal_labels.append(-1)  # 标记为无效
 
             internal_labels = torch.tensor(internal_labels, device=device)
+
+            # 过滤掉无效的标签（如果有）
+            valid_internal_mask = internal_labels >= 0
+            if not valid_internal_mask.all():
+                # 如果有无效标签，需要过滤掉对应的关系
+                # 这种情况应该极少发生
+                valid_internal_indices = valid_internal_mask.nonzero().squeeze()
+                projected_features = projected_features[valid_internal_indices]
+                internal_labels = internal_labels[valid_internal_indices]
 
             # 计算损失
             loss_dict = self._compute_dpl_losses(
@@ -223,7 +268,7 @@ class PredicateRefiner(nn.Module):
             target_labels: 训练时的真实谓词标签 [num_relations] (可选)
 
         Returns:
-            fused_logits: DPL优化融合后的关系预测 [num_relations, num_rel_cls]
+            fused_probs: DPL优化融合后的关系预测 [num_relations, num_rel_cls]
             loss_dict: DPL损失字典 (训练时返回)
         """
         # 获取目标谓词索引
@@ -238,8 +283,7 @@ class PredicateRefiner(nn.Module):
             dpl_rel_probs, loss_dict, valid_mask = self(enhanced_features, target_labels=target_labels)
             confidences = None  # 训练时不需要置信度
         else:
-            # 推理模式：禁用梯度
-            self.eval()
+            # 推理模式：禁用梯度（不改变训练模式状态）
             with torch.no_grad():
                 dpl_rel_probs, confidences, _ = self(enhanced_features)
             loss_dict = None
@@ -290,15 +334,17 @@ class PredicateRefiner(nn.Module):
                 )
 
         # 重新归一化每一行，确保概率和为1
-        fused_probs = fused_probs / fused_probs.sum(dim=1, keepdim=True)
+        prob_sums = fused_probs.sum(dim=1, keepdim=True)
+        prob_sums = torch.where(prob_sums > 0, prob_sums, torch.ones_like(prob_sums))
+        fused_probs = fused_probs / prob_sums
 
-        # 转换回 logits 空间
-        fused_logits = torch.log(fused_probs + 1e-8)
 
+        # 保持概率空间，避免双重 log 导致 NaN
+        # 外层的 F_nll_loss 会自动处理 log
         if self.training and target_labels is not None:
-            return fused_logits, loss_dict
+            return fused_probs, loss_dict
         else:
-            return fused_logits
+            return fused_probs
 
 
 class PredicateDictLoader:
@@ -338,7 +384,7 @@ class DPLossCalculator:
 
     def get_diversity_loss(self, features, prototypes, logsigma, sample_size_array, target_labels):
         """
-        计算多样性感知损失
+        多样性感知损失 - 与原始DPL实现一致
 
         Args:
             features: 关系特征 [num_relations, feature_dim]
@@ -347,33 +393,67 @@ class DPLossCalculator:
             sample_size_array: 每个类的采样数量 [num_classes]
             target_labels: 目标标签 [num_relations]
         """
-        num_relations = features.shape[0]
         device = features.device
 
-        total_loss = 0.0
-        count = 0
+        # 确保 sample_size_array 在正确的设备上
+        sample_size_array = sample_size_array.to(device)
 
-        for i in range(num_relations):
-            target_idx = target_labels[i].item()
-            target_prototype = prototypes[target_idx]
-            target_logsigma = logsigma[target_idx]
-            num_samples = sample_size_array[target_idx]
+        # 1. 一次性为所有类别生成所有采样点（与原始DPL一致）
+        all_samples = []
+        for label_idx in range(prototypes.shape[0]):
+            proto = prototypes[label_idx]  # [feature_dim]
+            log_sigma = logsigma[label_idx]  # [feature_dim]
+            num_samples = sample_size_array[label_idx].item()
 
-            # 从目标原型的高斯分布中采样
+            # 数值稳定性保护
+            log_sigma_clamped = torch.clamp(log_sigma, min=-10, max=10)
+
+            # 为该类别生成采样点 [num_samples, feature_dim]
             eps = torch.randn(num_samples, prototypes.shape[1], device=device)
-            samples = eps * torch.exp(target_logsigma) + target_prototype
+            samples = eps * torch.exp(log_sigma_clamped) + proto
+            all_samples.append(samples)
 
-            # 计算当前特征到采样点的距离
-            distances = torch.norm(samples - features[i].unsqueeze(0), dim=1)
+        # 拼接所有采样点: [total_samples, feature_dim]
+        all_samples = torch.cat(all_samples, dim=0)
 
-            # 计算多样性损失
-            min_distance = distances.min()
-            if min_distance > self.radius:
-                loss = (min_distance - self.radius) ** 2
-                total_loss += loss
-                count += 1
+        # 检查数值稳定性
+        if torch.isnan(all_samples).any() or torch.isinf(all_samples).any():
+            return torch.tensor(0.0, device=device, requires_grad=True)
 
-        if count > 0:
-            return self.alpha * (total_loss / count)
+        # 2. 计算所有关系到所有采样点的距离矩阵（与原始DPL的distance函数一致）
+        # features: [num_relations, feature_dim]
+        # all_samples: [total_samples, feature_dim]
+        features_square = torch.sum(features ** 2, dim=1, keepdim=True)  # [num_relations, 1]
+        samples_square = torch.sum(all_samples ** 2, dim=1)  # [total_samples]
+        # 使用 clamp 防止浮点误差导致负数
+        squared_distances = features_square + samples_square - 2 * torch.matmul(features, all_samples.t())
+        squared_distances = torch.clamp(squared_distances, min=0.0)
+        distance_matrix = torch.sqrt(squared_distances)
+        # distance_matrix: [num_relations, total_samples]
+
+        # 3. 从每个类别的采样点中选择最小距离（与原始DPL的get_min_dists_z一致）
+        min_distances_per_class = []
+        sample_count = 0
+        for label_idx in range(prototypes.shape[0]):
+            num_samples = sample_size_array[label_idx].item()
+            # 取该类别的采样列: [num_relations, num_samples]
+            class_distances = distance_matrix[:, sample_count:sample_count + num_samples]
+            # 对每个关系，取到该类别采样的最小距离: [num_relations, 1]
+            min_dist = class_distances.sort(dim=1, descending=False)[0][:, :1]
+            min_distances_per_class.append(min_dist)
+            sample_count += num_samples
+
+        # 拼接: [num_relations, num_classes]
+        min_distances_per_class = torch.cat(min_distances_per_class, dim=1)
+
+        # 4. 选择每个关系对应真实标签的距离进行损失计算
+        selected_distances = min_distances_per_class[torch.arange(target_labels.size(0)), target_labels]
+
+        # 5. 计算 margin loss（只在距离大于radius时计算）
+        valid_mask = selected_distances > self.radius
+        if valid_mask.any():
+            valid_distances = selected_distances[valid_mask]
+            loss = torch.mean((valid_distances - self.radius) ** 2)
+            return self.alpha * loss
         else:
             return torch.tensor(0.0, device=device, requires_grad=True)
