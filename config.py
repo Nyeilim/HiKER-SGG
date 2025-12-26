@@ -100,8 +100,14 @@ FCG_FREQ_LIMIT = 99999 # FCG 三级节点频率限制，超过这个频率的三
 FCG_NONREL_SAMPLE_RATIO = 1.0 # FCG 网络空关系采样比率，真实关系数量 * 比率 = 空关系数量
 # GGNN Bridge Edge Initial
 PRED_BRIDGE_EDGE_INITIAL = False
-## DPL (Semantic Diversity-aware Prototype-based Learning)
-USE_DPL_REFINER = True  # 是否启用DPL谓词微调模块
+## DPL (Diversity-aware Prototype-based Learning with Triplet Loss)
+USE_DPL_REFINER = True
+ENABLE_DPL_FUSION = True  # 是否启用DPL融合
+# DPL特点：
+# - 使用VR特征（GGNN之前），独立训练不影响主分支
+# - 原型用NODE_EMBEDDING预训练嵌入初始化
+# - 使用Triplet Loss替代多样性损失
+# - 聚焦优化可改进的谓词（8个）
 # =============================================================================
 # 全局变量
 BPL_LIMIT = 1000 # BPL 单个谓词上限

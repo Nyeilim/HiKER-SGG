@@ -71,16 +71,14 @@ class GGNNRelReason(Module):
         if self.use_predicate_refiner:
             from model.predicate_refiner import PredicateRefiner
             self.predicate_refiner = PredicateRefiner(
-                feature_dim=self.rel_dim,
-                prototype_dim=128,
-                avg_sample_size=15,
-                alpha=10.0,
-                radius=1.0,
-                freq_based_sample=True
+                feature_dim=self.rel_dim,  # VR维度 (4096)
+                triplet_margin=1.0
             )
+            # 添加 DPL 损失追踪
+            self.dpl_loss_value = 0.0
 
     # 这个 forward 方法是 Module 抽象类里面待实现的 Callable 方法
-    def forward(self, im_inds, obj_fmaps, obj_logits, rel_inds, vr, obj_labels=None, boxes_per_cls=None, fcg_rel_mask=None):
+    def forward(self, im_inds, obj_fmaps, obj_logits, rel_inds, vr, obj_labels=None, boxes_per_cls=None, fcg_rel_mask=None, rel_labels=None):
         """
         Reason relationship classes using knowledge of object and relationship co-currency.
         入参的 obj_logits 就是前面的 obj_dist
@@ -144,9 +142,32 @@ class GGNNRelReason(Module):
         # DPL 谓词精调：对高错误率谓词进行专门优化
         if self.use_predicate_refiner and hasattr(self, 'predicate_refiner'):
             try:
-                rel_logits = self._apply_dpl_refining(rel_logits, im_inds, rel_inds, obj_fmaps, vr)
+                from config import ENABLE_DPL_FUSION
+                if self.training:
+                    # 训练时：前向传播 + 融合 + 计算损失
+                    # 将 logits 转换为概率
+                    rel_probs = F.softmax(rel_logits, dim=1)
+                    rel_logits, dpl_loss_dict = self.predicate_refiner.apply_dpl_and_fuse(
+                        rel_probs, vr.detach(),  # detach 防止梯度流回主分支
+                        target_labels=rel_labels,
+                        enable_fusion=ENABLE_DPL_FUSION
+                    )
+                    # 存储损失供外部访问
+                    self.dpl_loss_value = dpl_loss_dict.get('triplet_loss', 0.0) + dpl_loss_dict.get('orthogonal_loss', 0.0)
+                else:
+                    # 推理时：只做融合，不计算损失
+                    rel_probs = F.softmax(rel_logits, dim=1)
+                    rel_logits = self.predicate_refiner.apply_dpl_and_fuse(
+                        rel_probs, vr.detach(),
+                        target_labels=None,
+                        enable_fusion=True
+                    )
+                    self.dpl_loss_value = 0.0
             except Exception as e:
                 # 静默处理错误，返回原始预测
+                import traceback
+                print(f"DPL Error: {e}")
+                traceback.print_exc()
                 pass
 
         if self.ggnn.refine_obj_cls: # False
@@ -177,62 +198,6 @@ class GGNNRelReason(Module):
             obj_preds = obj_labels if obj_labels is not None else obj_probs[:,1:].max(1)[1] + 1 # PredCl 和 SGCl 任务不用做分类，直接拿真实标签作为 entity 的预测标签
 
         return obj_logits, obj_preds, rel_logits, scpred_softmax, scent_softmax, fcg_pred_softmax
-
-    def _apply_dpl_refining(self, rel_logits, im_inds, rel_inds, obj_fmaps, vr):
-        """
-        应用 DPL 谓词精调优化
-
-        Args:
-            rel_logits: 原始关系预测 [num_relations, num_rel_cls]
-            im_inds: 图像索引 [num_relations]
-            rel_inds: 关系索引 [num_relations, 2] (subject_idx, object_idx)
-            obj_fmaps: 物体特征 [num_objects, feature_dim]
-            vr: 关系特征 [num_relations, rel_dim]
-
-        Returns:
-            refined_rel_logits: DPL优化后的关系预测 [num_relations, num_rel_cls]
-        """
-        # 获取目标谓词在全局谓词列表中的索引
-        target_pred_indices = self.predicate_refiner.get_target_predicate_indices(
-            self.ggnn.ind_to_predicates
-        )
-
-        if not target_pred_indices:
-            return rel_logits
-
-        # 使用 DPL 进行预测
-        self.predicate_refiner.eval()
-        with torch.no_grad():
-            dpl_rel_dists, confidences = self.predicate_refiner(vr)
-
-        # 将 DPL 预测结果融合到全局预测中
-        refined_rel_logits = self.predicate_refiner.convert_to_global_logits(
-            dpl_rel_dists, target_pred_indices, rel_logits
-        )
-
-        # 基于置信度进行智能融合
-        avg_confidence = confidences.mean().item()
-        avg_confidence = min(max(avg_confidence, 0.1), 0.9)
-
-        # 动态融合权重
-        if avg_confidence > 0.8:
-            alpha = 0.3  # 更多依赖 DPL
-        elif avg_confidence > 0.6:
-            alpha = 0.5  # 平衡融合
-        elif avg_confidence > 0.4:
-            alpha = 0.7  # 主要保持原样
-        else:
-            alpha = 0.9  # 几乎完全保持原样
-
-        # 对目标谓词进行融合
-        for target_idx in target_pred_indices:
-            original_scores = rel_logits[:, target_idx]
-            dpl_scores = refined_rel_logits[:, target_idx]
-            refined_rel_logits[:, target_idx] = (
-                alpha * original_scores + (1 - alpha) * dpl_scores
-            )
-
-        return refined_rel_logits
 
 
 class HiKER(Module):
@@ -386,7 +351,8 @@ class HiKER(Module):
             rel_inds=rel_inds,
             obj_labels=result.rm_obj_labels if self.training or self.mode == 'predcls' else None,
             boxes_per_cls=result.boxes_all, # None
-            fcg_rel_mask=result.fcg_rel_mask
+            fcg_rel_mask=result.fcg_rel_mask,
+            rel_labels=result.rel_labels[:, -1] if result.rel_labels is not None else None  # 添加 rel_labels
         )
 
         # 如果是训练，这里直接返回去算损失了；如果是测试/验证，会往下走算出具体的标签分布
