@@ -335,15 +335,19 @@ class HiKER(Module):
 
         # DPL 谓词精调：在 HiKER 主模型中集成 DPL
         if hasattr(self, 'predicate_refiner'):
+            from config import ENABLE_DPL_FUSION
             if self.training:
                 # 训练模式：使用增强特征和真实标签
                 result.rel_dists, result.dpl_loss = self.predicate_refiner.apply_dpl_and_fuse(
-                    result.rel_dists, result.enhanced_vr.detach(), target_labels=result.rel_labels[:, -1]
+                    result.rel_dists, result.enhanced_vr.detach(),
+                    target_labels=result.rel_labels[:, -1],
+                    enable_fusion=ENABLE_DPL_FUSION
                 )
             else:
                 # 推理模式：只使用增强特征
                 result.rel_dists = self.predicate_refiner.apply_dpl_and_fuse(
-                    result.rel_dists, result.enhanced_vr
+                    result.rel_dists, result.enhanced_vr,
+                    enable_fusion=ENABLE_DPL_FUSION
                 )
 
         # 如果是训练，这里直接返回去算损失了；如果是测试/验证，会往下走算出具体的标签分布

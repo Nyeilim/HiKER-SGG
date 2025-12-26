@@ -102,6 +102,7 @@ FCG_NONREL_SAMPLE_RATIO = 1.0 # FCG 网络空关系采样比率，真实关系�
 PRED_BRIDGE_EDGE_INITIAL = False
 ## DPL (Semantic Diversity-aware Prototype-based Learning)
 USE_DPL_REFINER = True  # 是否启用DPL谓词微调模块
+ENABLE_DPL_FUSION = False  # 是否启用DPL融合（False时只训练DPL但不融合到主分支，用于实验）
 # =============================================================================
 # 全局变量
 BPL_LIMIT = 1000 # BPL 单个谓词上限
