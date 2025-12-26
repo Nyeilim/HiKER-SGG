@@ -247,17 +247,14 @@ class HiKER(Module):
                                              config=config,
                                              )
 
-        # DPL 谓词精调器
+        # DPL 谓词精调器（使用VR特征，独立于GGNN）
         from config import USE_DPL_REFINER
         self.use_predicate_refiner = USE_DPL_REFINER
         if self.use_predicate_refiner:
             from model.predicate_refiner import PredicateRefiner
             self.predicate_refiner = PredicateRefiner(
-                feature_dim=ggnn_rel_hidden_dim,  # 使用 GGNN 隐藏层维度 (512)
-                prototype_dim=128,
-                avg_sample_size=15,
-                alpha=10.0,
-                radius=1.0
+                feature_dim=self.rel_dim,  # VR维度 (4096)
+                triplet_margin=1.0  # Triplet Loss的margin
             )
 
         if rel_counts_path is not None:
@@ -333,20 +330,20 @@ class HiKER(Module):
             fcg_rel_mask=result.fcg_rel_mask
         )
 
-        # DPL 谓词精调：在 HiKER 主模型中集成 DPL
+        # DPL 谓词精调：使用VR特征（独立于GGNN训练）
         if hasattr(self, 'predicate_refiner'):
             from config import ENABLE_DPL_FUSION
             if self.training:
-                # 训练模式：使用增强特征和真实标签
+                # 训练模式：使用VR特征和真实标签
                 result.rel_dists, result.dpl_loss = self.predicate_refiner.apply_dpl_and_fuse(
-                    result.rel_dists, result.enhanced_vr.detach(),
+                    result.rel_dists, vr.detach(),  # VR特征，独立于GGNN
                     target_labels=result.rel_labels[:, -1],
                     enable_fusion=ENABLE_DPL_FUSION
                 )
             else:
-                # 推理模式：只使用增强特征
+                # 推理模式：使用VR特征
                 result.rel_dists = self.predicate_refiner.apply_dpl_and_fuse(
-                    result.rel_dists, result.enhanced_vr,
+                    result.rel_dists, vr,  # VR特征，独立于GGNN
                     enable_fusion=ENABLE_DPL_FUSION
                 )
 

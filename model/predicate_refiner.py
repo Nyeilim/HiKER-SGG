@@ -1,45 +1,49 @@
 """
-谓词微调分类器 - 基于 DPL (Semantic Diversity-aware Prototype-based Learning) 的实现
-针对高错误率谓词进行专门优化，使用高斯分布参数化和多样性感知损失
+谓词微调分类器 - 基于原型学习的谓词精调器
+
+关键改进：
+1. 使用VR特征（独立于GGNN，避免影响主分支）
+2. 原型用NODE_EMBEDDING预训练嵌入初始化（有语义先验）
+3. 使用Triplet Loss替代多样性损失（同时推+拉）
+4. 聚焦优化可改进的谓词（8个，错误率40-70%）
 """
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import json
+import pickle
 
-from config import VG_SGG_DICT_FN
+from config import VG_SGG_DICT_FN, NODE_EMBEDDING
 
-# 需要优化的目标谓词列表
+# 可优化的目标谓词列表（错误率40-70%，有明显视觉特征，样本数>100）
 TARGET_PREDICATES = [
-    'flying in',
-    'lying on',
-    'walking in',
-    'mounted on',
-    'part of',
-    'playing',
-    'on',
-    'says',
-    'above',
-    'across',
+    'behind',         # 47.3%错误率，空间关系清晰
+    'looking at',     # 48.4%错误率，有方向性
+    'along',          # 52.9%错误率，空间关系明显
+    'sitting on',     # 53.6%错误率，有姿态特征
+    'holding',        # 62.6%错误率，视觉明显（手拿着）
+    'using',          # 62.0%错误率，有交互特征
+    'under',          # 61.1%错误率，空间关系清晰
+    'wearing',        # 73.9%错误率，视觉明显（衣服）
 ]
 
 
 class PredicateRefiner(nn.Module):
     """
-    基于 DPL (Semantic Diversity-aware Prototype-based Learning) 的谓词精调器
-    针对指定谓词进行专门优化，使用高斯分布参数化和多样性感知损失
-    直接输出概率分布用于融合
+    基于原型学习的谓词精调器
+
+    特点：
+    - 使用预训练的谓词嵌入初始化原型（从NODE_EMBEDDING加载）
+    - 使用Triplet Loss训练（拉近正样本，推开负样本）
+    - 接收VR特征作为输入（独立于主分支GGNN）
+    - 只优化8个可改进的谓词
     """
-    def __init__(self, feature_dim=1024, prototype_dim=128, avg_sample_size=20,
-                 alpha=10.0, radius=1.0):
+    def __init__(self, feature_dim=1024, triplet_margin=1.0):
         super(PredicateRefiner, self).__init__()
 
         self.feature_dim = feature_dim
-        self.prototype_dim = prototype_dim
-        self.avg_sample_size = avg_sample_size
-        self.alpha = alpha
-        self.radius = radius
+        self.triplet_margin = triplet_margin
 
         # 加载谓词字典
         self.predicate_dict_loader = PredicateDictLoader()
@@ -48,28 +52,47 @@ class PredicateRefiner(nn.Module):
         self.target_predicates = TARGET_PREDICATES
         self.num_target_predicates = len(self.target_predicates)
 
-        # 特征投影层：将输入特征投影到原型空间
-        self.feature_projector = nn.Linear(feature_dim, prototype_dim)
+        # 加载NODE_EMBEDDING，获取预训练的谓词嵌入
+        try:
+            with open(NODE_EMBEDDING, 'rb') as f:
+                emb_ent, emb_pred = pickle.load(f)
+            # emb_pred形状: [51, embedding_dim]
+            self.pred_embedding_dim = emb_pred.shape[1]
+        except Exception as e:
+            print(f"Warning: Failed to load NODE_EMBEDDING: {e}")
+            print("Falling back to random initialization")
+            self.pred_embedding_dim = 128
+            emb_pred = None
 
-        # 原型嵌入：每个目标谓词的原型向量
-        self.prototype_emb = nn.Parameter(
-            torch.randn(self.num_target_predicates, prototype_dim) * 0.1,
-            requires_grad=True
-        )
-        nn.init.orthogonal_(self.prototype_emb)
+        # 特征投影层：将VR特征投影到谓词嵌入空间
+        self.feature_projector = nn.Linear(feature_dim, self.pred_embedding_dim)
 
-        # 高斯分布参数化：将原型映射到高斯分布的均值和标准差
-        self.gaussian_emb = nn.Linear(prototype_dim, prototype_dim * 2)
+        # 原型嵌入：使用预训练的谓词嵌入初始化
+        if emb_pred is not None:
+            # 从51个谓词中提取目标谓词的嵌入
+            target_embeddings = []
+            for pred_name in self.target_predicates:
+                pred_idx = self.predicate_dict_loader.predicate_to_idx.get(pred_name)
+                if pred_idx is not None and pred_idx < emb_pred.shape[0]:
+                    target_embeddings.append(emb_pred[pred_idx])
+                else:
+                    # 如果找不到，用随机初始化
+                    target_embeddings.append(torch.randn(self.pred_embedding_dim) * 0.1)
 
-        # 距离缩放参数
+            # 堆叠成原型矩阵
+            prototype_init = torch.stack(target_embeddings)
+            self.prototype_emb = nn.Parameter(prototype_init, requires_grad=True)
+        else:
+            # 回退到随机初始化
+            self.prototype_emb = nn.Parameter(
+                torch.randn(self.num_target_predicates, self.pred_embedding_dim) * 0.1,
+                requires_grad=True
+            )
+            nn.init.orthogonal_(self.prototype_emb)
+
+        # 距离缩放参数（用于将距离转换为logits）
         self.negative_scale = nn.Parameter(torch.ones(1) * 15)
         self.shift = nn.Parameter(torch.ones(1) * 15)
-
-        # 固定采样大小
-        self.sample_size_array = torch.ones(self.num_target_predicates, dtype=torch.int32) * avg_sample_size
-
-        # 损失计算器
-        self.loss_calculator = DPLossCalculator(alpha=alpha, radius=radius)
 
         # 预计算标签映射缓存，加速训练
         self.vg_idx_to_internal_cache = {}
@@ -77,16 +100,13 @@ class PredicateRefiner(nn.Module):
             if pred_name in self.target_predicates:
                 self.vg_idx_to_internal_cache[int(vg_idx)] = self.target_predicates.index(pred_name)
 
-        # 初始化参数
         self._init_parameters()
 
-    
+
     def _init_parameters(self):
         """初始化网络参数"""
         nn.init.xavier_uniform_(self.feature_projector.weight)
         nn.init.constant_(self.feature_projector.bias, 0)
-        nn.init.xavier_uniform_(self.gaussian_emb.weight)
-        nn.init.constant_(self.gaussian_emb.bias, 0)
 
     def forward(self, features, target_labels=None):
         """
@@ -106,9 +126,9 @@ class PredicateRefiner(nn.Module):
         # 获取目标谓词的真实索引
         target_indices = self.get_target_predicate_indices()
 
-        # 创建掩码：标记哪些关系是我们的目标谓词（向量化优化）
+        # 创建掩码：标记哪些关系是我们的目标谓词
         if target_labels is not None:
-            # 训练时：使用 torch.isin 进行向量化成员检查（PyTorch 1.7+）
+            # 训练时：使用 torch.isin 进行向量化成员检查
             target_indices_tensor = torch.tensor(target_indices, device=device)
             valid_mask = torch.isin(target_labels, target_indices_tensor)
         else:
@@ -128,16 +148,12 @@ class PredicateRefiner(nn.Module):
         valid_features = features[valid_mask]  # [num_valid, feature_dim]
 
         # 投影特征到原型空间
-        projected_features = self.feature_projector(valid_features)  # [num_valid, prototype_dim]
+        projected_features = self.feature_projector(valid_features)  # [num_valid, embedding_dim]
 
         # 获取原型参数
-        prototypes = self.prototype_emb  # [num_target_predicates, prototype_dim]
+        prototypes = self.prototype_emb  # [num_target_predicates, embedding_dim]
 
-        # 计算高斯分布参数
-        gaussian_params = self.gaussian_emb(prototypes)  # [num_target_predicates, prototype_dim * 2]
-        mu, logsigma = torch.split(gaussian_params, self.prototype_dim, dim=1)  # 各 [num_target_predicates, prototype_dim]
-
-        # 标准化原型
+        # 标准化特征和原型（L2归一化）
         prototypes_norm = F.normalize(prototypes, p=2, dim=1)
         projected_features_norm = F.normalize(projected_features, p=2, dim=1)
 
@@ -145,99 +161,95 @@ class PredicateRefiner(nn.Module):
         rel_rep_expand = projected_features_norm.unsqueeze(1).expand(-1, self.num_target_predicates, -1)
         prototype_expand = prototypes_norm.unsqueeze(0).expand(projected_features_norm.shape[0], -1, -1)
 
-        # 计算加权距离 (考虑高斯分布的不确定性)
-        distance_set = (rel_rep_expand - prototype_expand).norm(dim=2)
+        # 计算欧氏距离
+        distance_set = (rel_rep_expand - prototype_expand).norm(dim=2)  # [num_valid, num_target_predicates]
 
-        # 使用负缩放和偏移转换为相似度分数
+        # 转换为相似度分数（距离越小，分数越高）
         rel_scores = -self.negative_scale * distance_set + self.shift
 
-        # 推理时：使用标准差进行归一化（与原始DPL一致）
-        if not self.training:
-            # 使用标准差归一化距离，让不确定性高的原型有更大的容忍度
-            # logsigma: [num_target_predicates, prototype_dim]
-            # 需要扩展到与 (rel_rep_expand - prototype_expand) 相同的维度进行除法
-            logsigma_exp = logsigma.exp()  # [num_target_predicates, prototype_dim]
-
-            # 计算归一化距离: (rel_rep - prototype) / sigma
-            # [num_valid, num_target_predicates, prototype_dim] / [num_target_predicates, prototype_dim]
-            # 自动broadcast到 [num_valid, num_target_predicates, prototype_dim]
-            rel_rep_div = (rel_rep_expand - prototype_expand) / logsigma_exp.unsqueeze(0)
-            nd = rel_rep_div.norm(dim=2)  # [num_valid, num_target_predicates]
-
-            # 归一化调整 (保持与原始距离的尺度一致)
-            # 添加数值稳定性：防止除以0
-            nd_max = nd.max(dim=1)[0]
-            nd_max = torch.where(nd_max > 0, nd_max, torch.ones_like(nd_max))
-            distance_max = distance_set.max(dim=1)[0]
-
-            ndn = (nd.t() / nd_max * distance_max).t()
-            rel_scores = -self.negative_scale * ndn + self.shift
-
-        # 直接转换为概率分布输出
-        valid_rel_probs = F.softmax(rel_scores, dim=1)  # [num_valid, num_target_predicates], 范围: 0~1
+        # 转换为概率分布
+        rel_probs = F.softmax(rel_scores, dim=1)  # [num_valid, num_target_predicates]
 
         # 计算置信度（基于最大概率）
-        valid_confidences = valid_rel_probs.max(dim=1)[0]
+        confidences = rel_probs.max(dim=1)[0]  # [num_valid]
 
         # 创建完整的输出张量
-        rel_probs = torch.zeros(num_relations, self.num_target_predicates, device=device)
-        rel_probs[valid_mask] = valid_rel_probs
+        output_probs = torch.zeros(num_relations, self.num_target_predicates, device=device)
+        output_probs[valid_mask] = rel_probs
+
+        output_confidences = torch.zeros(num_relations, device=device)
+        output_confidences[valid_mask] = confidences
 
         if self.training and target_labels is not None:
-            # 训练时：需要转换标签（向量化优化）
+            # 训练时：需要转换标签并计算损失
             valid_target_labels = target_labels[valid_mask]
 
-            # 向量化标签转换：使用tensor操作替代循环
-            # 创建一个映射表，大小为最大VG索引+1
+            # 向量化标签转换
             if not hasattr(self, 'label_mapping_tensor') or self.label_mapping_tensor.device != device:
-                # 创建映射表：-1表示无效索引
                 max_idx = max(self.vg_idx_to_internal_cache.keys()) if self.vg_idx_to_internal_cache else -1
                 if max_idx < 0:
-                    # 如果没有有效映射，直接返回
-                    return rel_probs, {}, valid_mask
+                    return output_probs, {}, valid_mask
 
                 mapping = torch.full((max_idx + 1,), -1, dtype=torch.long, device=device)
                 for vg_idx, internal_idx in self.vg_idx_to_internal_cache.items():
                     mapping[vg_idx] = internal_idx
                 self.label_mapping_tensor = mapping
 
-            # 向量化查找
             internal_labels = self.label_mapping_tensor[valid_target_labels]
 
-            # 过滤掉无效的标签（如果有）
+            # 过滤无效标签
             valid_internal_mask = internal_labels >= 0
             if not valid_internal_mask.all():
-                # 如果有无效标签，需要过滤掉对应的关系
-                # 这种情况应该极少发生
                 valid_internal_indices = valid_internal_mask.nonzero().squeeze()
                 projected_features = projected_features[valid_internal_indices]
                 internal_labels = internal_labels[valid_internal_indices]
+                prototypes_norm = prototypes_norm[valid_internal_indices] if valid_internal_indices.shape[0] < prototypes_norm.shape[0] else prototypes_norm
 
-            # 计算损失
-            loss_dict = self._compute_dpl_losses(
-                projected_features, prototypes_norm, logsigma, internal_labels
+            # 计算Triplet Loss
+            loss_dict = self._compute_triplet_loss(
+                projected_features, prototypes_norm, internal_labels, distance_set
             )
-            return rel_probs, loss_dict, valid_mask
+            return output_probs, loss_dict, valid_mask
         else:
-            # 推理时：返回概率和置信度
-            confidences = torch.zeros(num_relations, device=device)
-            confidences[valid_mask] = valid_confidences
-            return rel_probs, confidences, valid_mask
+            return output_probs, output_confidences, valid_mask
 
-    def _compute_dpl_losses(self, features, prototypes, logsigma, target_labels):
-        """计算DPL的各个损失项"""
+    def _compute_triplet_loss(self, features, prototypes, target_labels, distance_set):
+        """
+        计算Triplet Loss：拉近正样本，推开负样本
+        """
         loss_dict = {}
+        device = features.device
 
-        # 1. 原型正交性损失
-        proto_sim = torch.matmul(prototypes, prototypes.t())
-        ortho_loss = self.loss_calculator.get_orthogonal_loss(proto_sim)
-        loss_dict['orthogonal_loss'] = ortho_loss
+        # 1. Triplet Loss（主要损失）
+        num_samples = target_labels.size(0)
 
-        # 2. 多样性感知损失
-        diversity_loss = self.loss_calculator.get_diversity_loss(
-            features, prototypes, logsigma, self.sample_size_array, target_labels
-        )
-        loss_dict['diversity_loss'] = diversity_loss
+        # 正样本距离：到真实标签原型的距离
+        pos_dist = distance_set[torch.arange(num_samples), target_labels]  # [num_samples]
+
+        # 负样本距离：到其他原型（取最小的k个）
+        num_classes = distance_set.shape[1]
+        k_neg = min(5, num_classes - 1)  # 取5个最近的负样本
+
+        # 创建mask，排除正样本
+        mask = torch.ones_like(distance_set)
+        mask[torch.arange(num_samples), target_labels] = float('inf')
+
+        # 负样本距离（最小的k个）
+        neg_distances = mask * distance_set
+        neg_dist, _ = torch.topk(neg_distances, k=k_neg, dim=1, largest=False)
+        neg_dist = neg_dist.mean(dim=1)  # [num_samples]
+
+        # Triplet Loss: max(0, pos_dist - neg_dist + margin)
+        triplet_loss = torch.clamp(pos_dist - neg_dist + self.triplet_margin, min=0.0).mean()
+        loss_dict['triplet_loss'] = triplet_loss
+
+        # 2. 原型正交性损失（辅助损失，让原型保持分散）
+        proto_sim = torch.matmul(prototypes, prototypes.t())  # [num_classes, num_classes]
+        # 计算非对角线元素的平方（希望接近0）
+        mask = torch.eye(proto_sim.size(0), device=device).bool()
+        proto_sim_off_diag = proto_sim[~mask]
+        ortho_loss = (proto_sim_off_diag ** 2).mean()
+        loss_dict['orthogonal_loss'] = 0.1 * ortho_loss  # 权重较小
 
         return loss_dict
 
@@ -254,16 +266,16 @@ class PredicateRefiner(nn.Module):
 
         return target_indices
 
-    def apply_dpl_and_fuse(self, original_input, enhanced_features, target_labels=None,
-                          enable_fusion=False):
+    def apply_dpl_and_fuse(self, original_input, vr_features, target_labels=None,
+                          enable_fusion=True):
         """
         应用 DPL 优化并融合到原始预测中
 
         Args:
             original_input: 原始关系预测 logits 或概率 [num_relations, num_rel_cls]
-            enhanced_features: GGNN语义增强后的特征 [num_relations, feature_dim]
+            vr_features: VR视觉特征 [num_relations, feature_dim]
             target_labels: 训练时的真实谓词标签 [num_relations] (可选)
-            enable_fusion: 是否启用DPL融合，False时只训练不融合
+            enable_fusion: 是否启用DPL融合
 
         Returns:
             fused_probs: DPL优化融合后的关系预测 [num_relations, num_rel_cls]
@@ -273,20 +285,23 @@ class PredicateRefiner(nn.Module):
         target_indices = self.get_target_predicate_indices()
 
         if not target_indices:
-            return original_input
+            if self.training and target_labels is not None:
+                return original_input, {}
+            else:
+                return original_input
 
-        # 使用增强后的关系特征进行 DPL 优化
+        # 使用VR特征进行 DPL 优化
         if self.training and target_labels is not None:
             # 训练模式：前向传播并计算损失
-            dpl_rel_probs, loss_dict, valid_mask = self(enhanced_features, target_labels=target_labels)
+            dpl_rel_probs, loss_dict, valid_mask = self(vr_features, target_labels=target_labels)
             confidences = None  # 训练时不需要置信度
         else:
             # 推理模式：禁用梯度（不改变训练模式状态）
             with torch.no_grad():
-                dpl_rel_probs, confidences, _ = self(enhanced_features)
+                dpl_rel_probs, confidences, _ = self(vr_features)
             loss_dict = None
 
-        # 实验：如果禁用融合，直接返回原始预测（但仍然计算DPL损失用于训练）
+        # 如果禁用融合，直接返回原始预测（但仍然计算DPL损失用于训练）
         if not enable_fusion:
             if self.training and target_labels is not None:
                 return original_input, loss_dict
@@ -299,50 +314,22 @@ class PredicateRefiner(nn.Module):
             if global_idx < original_input.shape[1]:
                 dpl_global_probs[:, global_idx] = dpl_rel_probs[:, i]
 
-        # 直接使用概率空间（输入已经是概率）
-        original_probs = original_input
+        # 固定融合策略：主分支90% + DPL 10%
+        alpha = 0.9  # 主分支权重
+        beta = 0.1   # DPL权重
 
-        # 每个关系单独进行概率空间加权
-        fused_probs = original_probs.clone()
-
-        # 使用每个关系的单独置信度（训练和推理统一）
-        for i in range(original_probs.shape[0]):
-            if self.training:
-                # 训练时：由于没有置信度，使用默认的保守策略
-                alpha = 0.9  # 主要保持原样，给DPL轻微的学习机会
-            else:
-                # 推理时：基于置信度决定是否使用DPL
-                confidence = confidences[i].item()
-
-                # 置信度太低，直接忽略DPL结果
-                if confidence < 0.2:
-                    continue  # 跳过DPL融合，保持原始预测
-
-                # 置信度足够高，进行融合（只做上界限制）
-                confidence = min(confidence, 0.9)
-
-                # 动态融合权重（基于该关系的置信度）
-                if confidence > 0.8:
-                    alpha = 0.3  # 更多依赖 DPL
-                elif confidence > 0.6:
-                    alpha = 0.5  # 平衡融合
-                elif confidence > 0.4:
-                    alpha = 0.7  # 主要保持原样
-                else:
-                    alpha = 0.9  # 低置信度但可用，主要保持原样
-
-            # 对该关系进行概率空间融合
-            for target_idx in target_indices:
-                fused_probs[i, target_idx] = (
-                    alpha * original_probs[i, target_idx] +
-                    (1 - alpha) * dpl_global_probs[i, target_idx]
-                )
+        # 对目标谓词进行融合
+        fused_probs = original_input.clone()
+        for target_idx in target_indices:
+            fused_probs[:, target_idx] = (
+                alpha * original_input[:, target_idx] +
+                beta * dpl_global_probs[:, target_idx]
+            )
 
         # 重新归一化每一行，确保概率和为1
         prob_sums = fused_probs.sum(dim=1, keepdim=True)
         prob_sums = torch.where(prob_sums > 0, prob_sums, torch.ones_like(prob_sums))
         fused_probs = fused_probs / prob_sums
-
 
         # 保持概率空间，避免双重 log 导致 NaN
         # 外层的 F_nll_loss 会自动处理 log
@@ -368,106 +355,3 @@ class PredicateDictLoader:
         self.idx_to_predicate = {int(k): v for k, v in data['idx_to_predicate'].items()}
         self.predicate_to_idx = data['predicate_to_idx']
         self.is_loaded = True
-
-
-class DPLossCalculator:
-    """DPL 特殊损失函数计算器"""
-
-    def __init__(self, alpha=10.0, radius=1.0):
-        self.alpha = alpha
-        self.radius = radius
-
-    def get_orthogonal_loss(self, proto_sim):
-        """
-        计算原型正交性损失
-        Args:
-            proto_sim: 原型相似度矩阵 [num_classes, num_classes]
-        """
-        eye_sim = torch.triu(torch.ones_like(proto_sim), diagonal=1)
-        loss_orth = torch.abs(proto_sim[eye_sim == 1]).mean()
-        return loss_orth
-
-    def get_diversity_loss(self, features, prototypes, logsigma, sample_size_array, target_labels):
-        """
-        多样性感知损失 - 与原始DPL实现一致
-
-        Args:
-            features: 关系特征 [num_relations, feature_dim]
-            prototypes: 原型向量 [num_classes, feature_dim]
-            logsigma: 高斯分布对数标准差 [num_classes, feature_dim]
-            sample_size_array: 每个类的采样数量 [num_classes]
-            target_labels: 目标标签 [num_relations]
-        """
-        device = features.device
-
-        # 确保 sample_size_array 在正确的设备上
-        sample_size_array = sample_size_array.to(device)
-
-        # 1. 一次性为所有类别生成所有采样点（优化版本）
-        # 预先计算总采样数，减少内存重分配
-        total_samples = sample_size_array.sum().item()
-        all_samples_list = []
-        sample_offset = 0
-
-        # 批量生成随机数，减少调用次数
-        for label_idx in range(prototypes.shape[0]):
-            proto = prototypes[label_idx]  # [feature_dim]
-            log_sigma = logsigma[label_idx]  # [feature_dim]
-            num_samples = sample_size_array[label_idx].item()
-
-            # 数值稳定性保护
-            log_sigma_clamped = torch.clamp(log_sigma, min=-10, max=10)
-            sigma_exp = torch.exp(log_sigma_clamped)  # 避免重复计算
-
-            # 为该类别生成采样点 [num_samples, feature_dim]
-            eps = torch.randn(num_samples, prototypes.shape[1], device=device)
-            samples = eps * sigma_exp + proto
-            all_samples_list.append(samples)
-            sample_offset += num_samples
-
-        # 拼接所有采样点: [total_samples, feature_dim]
-        all_samples = torch.cat(all_samples_list, dim=0)
-
-        # 检查数值稳定性
-        if torch.isnan(all_samples).any() or torch.isinf(all_samples).any():
-            return torch.tensor(0.0, device=device, requires_grad=True)
-
-        # 2. 计算所有关系到所有采样点的距离矩阵（与原始DPL的distance函数一致）
-        # features: [num_relations, feature_dim]
-        # all_samples: [total_samples, feature_dim]
-        features_square = torch.sum(features ** 2, dim=1, keepdim=True)  # [num_relations, 1]
-        samples_square = torch.sum(all_samples ** 2, dim=1)  # [total_samples]
-        # 使用 clamp 防止浮点误差导致负数
-        squared_distances = features_square + samples_square - 2 * torch.matmul(features, all_samples.t())
-        squared_distances = torch.clamp(squared_distances, min=0.0)
-        distance_matrix = torch.sqrt(squared_distances)
-        # distance_matrix: [num_relations, total_samples]
-
-        # 3. 从每个类别的采样点中选择最小距离（向量化优化）
-        # 使用 torch.topk 替代 sort，性能提升约3-5倍
-        min_distances_per_class = []
-        sample_count = 0
-        for label_idx in range(prototypes.shape[0]):
-            num_samples = sample_size_array[label_idx].item()
-            # 取该类别的采样列: [num_relations, num_samples]
-            class_distances = distance_matrix[:, sample_count:sample_count + num_samples]
-            # 对每个关系，取到该类别采样的最小距离: [num_relations, 1]
-            # 使用 topk(k=1) 替代 sort，速度更快
-            min_dist = torch.topk(class_distances, k=1, dim=1, largest=False)[0]
-            min_distances_per_class.append(min_dist)
-            sample_count += num_samples
-
-        # 拼接: [num_relations, num_classes]
-        min_distances_per_class = torch.cat(min_distances_per_class, dim=1)
-
-        # 4. 选择每个关系对应真实标签的距离进行损失计算
-        selected_distances = min_distances_per_class[torch.arange(target_labels.size(0)), target_labels]
-
-        # 5. 计算 margin loss（只在距离大于radius时计算）
-        valid_mask = selected_distances > self.radius
-        if valid_mask.any():
-            valid_distances = selected_distances[valid_mask]
-            loss = torch.mean((valid_distances - self.radius) ** 2)
-            return self.alpha * loss
-        else:
-            return torch.tensor(0.0, device=device, requires_grad=True)
