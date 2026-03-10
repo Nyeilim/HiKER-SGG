@@ -20,12 +20,12 @@ from config import VG_SGG_DICT_FN, NODE_EMBEDDING
 TARGET_PREDICATES = [
     'behind',         # 47.3%错误率，空间关系清晰
     'looking at',     # 48.4%错误率，有方向性
-    'along',          # 52.9%错误率，空间关系明显
     'sitting on',     # 53.6%错误率，有姿态特征
     'holding',        # 62.6%错误率，视觉明显（手拿着）
-    'using',          # 62.0%错误率，有交互特征
     'under',          # 61.1%错误率，空间关系清晰
     'wearing',        # 73.9%错误率，视觉明显（衣服）
+    'sitting on',
+    'in front of'
 ]
 
 

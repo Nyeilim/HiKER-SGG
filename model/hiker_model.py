@@ -9,6 +9,7 @@ from torch import tensor as torch_tensor, float32 as torch_float32, cat as torch
 from torch.cuda import current_device
 from torch.nn import Linear, Sequential, Module, AvgPool2d
 from torch.nn.functional import softmax as F_softmax, nll_loss as F_nll_loss
+import torch.nn.functional as F
 from torch.nn.parallel import replicate, parallel_apply
 from torchvision.ops import nms, roi_align
 
@@ -71,7 +72,7 @@ class GGNNRelReason(Module):
         if self.use_predicate_refiner:
             from model.predicate_refiner import PredicateRefiner
             self.predicate_refiner = PredicateRefiner(
-                feature_dim=self.rel_dim,  # VR维度 (4096)
+                feature_dim=hidden_dim,  # 投影后的VR维度 (1024)
                 triplet_margin=1.0
             )
             # 添加 DPL 损失追踪
@@ -148,7 +149,7 @@ class GGNNRelReason(Module):
                     # 将 logits 转换为概率
                     rel_probs = F.softmax(rel_logits, dim=1)
                     rel_logits, dpl_loss_dict = self.predicate_refiner.apply_dpl_and_fuse(
-                        rel_probs, vr.detach(),  # detach 防止梯度流回主分支
+                        rel_probs, vr.detach(),  # 使用投影后的VR特征，detach防止梯度流回主分支
                         target_labels=rel_labels,
                         enable_fusion=ENABLE_DPL_FUSION
                     )
