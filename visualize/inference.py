@@ -32,49 +32,16 @@ class SimpleInference:
         self.task_type = task_type
         self.test_n = test_n
 
-        # 确定 checkpoint 路径
-        if ckpt_path is None:
-            # 加载最优模型信息
-            best_matrices = load_best_matrices(task_type)
-            best_epoch = best_matrices['best_mr_epoch']
-            ckpt_path = f"checkpoints/kern_{task_type}/hikersgg_{task_type}_train/vgrel-{best_epoch}.tar"
-            print(f"Loading best model: epoch {best_epoch}")
+        # 使用 create_test_config 创建配置，这个方法已经包含了最优 epoch 和混淆矩阵的处理
+        self.conf = create_test_config(task_type, epoch=None if ckpt_path is None else None)
 
-        # 创建配置
-        self.conf = ModelConfig(f'''
-        -m {task_type}
-        -p 2500
-        -clip 5
-        -ckpt {ckpt_path}
-        -b 8
-        -nwork 8
-        -ngpu 1
-        -lr 1e-4
-        -pooling_dim 4096
-        -ggnn_rel_time_step_num 3
-        -ggnn_rel_hidden_dim 1024
-        -require_overlap_det
-        -use_bpl
-        -use_knowledge
-        -use_embedding
-        -filter_duplicate_rels
-        ''')
+        # 如果指定了自定义 ckpt_path，设置到配置
+        if ckpt_path is not None:
+            self.conf.ckpt = ckpt_path
 
         # 设置测试模式
         if test_n:
             self.conf.test_n = True
-
-        # 设置混淆矩阵路径
-        self.conf.MODEL.CONF_MAT_FREQ_TRAIN = config.data_path('misc/conf_mat_freq_train.npy')
-
-        # 设置对应 epoch 的混淆矩阵
-        best_epoch = best_matrices['best_mr_epoch']
-        matrix_suffix = best_epoch - (best_epoch + 1) % 3
-        if matrix_suffix >= 2:
-            conf_matrix_path = data_path('misc/conf/conf_mat_updated_{}.npy'.format(matrix_suffix))
-            if os.path.exists(conf_matrix_path):
-                self.conf.MODEL.CONF_MAT_FREQ_TRAIN = conf_matrix_path
-                print(f"Using confusion matrix for epoch {best_epoch}: {conf_matrix_path}")
 
         # 加载数据集和模型
         print("Loading dataset...")
@@ -86,16 +53,6 @@ class SimpleInference:
             self.dataset.ind_to_classes,
             self.dataset.ind_to_predicates
         )
-
-        # 加载权重
-        if self.conf.ckpt:
-            ckpt = torch.load(self.conf.ckpt)
-            from lib.pytorch_misc import optimistic_restore
-            optimistic_restore(self.model, ckpt['state_dict'], skip_clean=False)
-            print(f"Loaded checkpoint from {self.conf.ckpt}")
-
-        self.model.cuda()
-        self.model.eval()
 
         # 获取谓词映射
         self.ind_to_predicates = self.dataset.ind_to_predicates

@@ -5,6 +5,7 @@
 import os
 import sys
 import numpy as np
+from pyximport import pyximport
 
 sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
 pyximport.install(setup_args={"include_dirs": np.get_include()}, reload_support=True)
