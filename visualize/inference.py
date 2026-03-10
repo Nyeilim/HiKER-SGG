@@ -34,16 +34,11 @@ class SimpleInference:
 
         # 确定 checkpoint 路径
         if ckpt_path is None:
-            # 尝试加载最优模型信息
-            try:
-                best_matrices = load_best_matrices(task_type)
-                best_epoch = best_matrices['best_mr_epoch']
-                ckpt_path = f"checkpoints/kern_{task_type}/hikersgg_{task_type}_train/vgrel-{best_epoch}.tar"
-                print(f"Loading best model: epoch {best_epoch}")
-            except:
-                # 如果无法加载，使用默认 epoch 10
-                ckpt_path = f"checkpoints/kern_{task_type}/hikersgg_{task_type}_train/vgrel-10.tar"
-                print(f"Could not load best model info, using epoch 10")
+            # 加载最优模型信息
+            best_matrices = load_best_matrices(task_type)
+            best_epoch = best_matrices['best_mr_epoch']
+            ckpt_path = f"checkpoints/kern_{task_type}/hikersgg_{task_type}_train/vgrel-{best_epoch}.tar"
+            print(f"Loading best model: epoch {best_epoch}")
 
         # 创建配置
         self.conf = ModelConfig(f'''
@@ -73,17 +68,13 @@ class SimpleInference:
         self.conf.MODEL.CONF_MAT_FREQ_TRAIN = config.data_path('misc/conf_mat_freq_train.npy')
 
         # 设置对应 epoch 的混淆矩阵
-        try:
-            best_matrices = load_best_matrices(task_type)
-            best_epoch = best_matrices['best_mr_epoch']
-            matrix_suffix = best_epoch - (best_epoch + 1) % 3
-            if matrix_suffix >= 2:
-                conf_matrix_path = data_path('misc/conf/conf_mat_updated_{}.npy'.format(matrix_suffix))
-                if os.path.exists(conf_matrix_path):
-                    self.conf.MODEL.CONF_MAT_FREQ_TRAIN = conf_matrix_path
-                    print(f"Using confusion matrix for epoch {best_epoch}: {conf_matrix_path}")
-        except:
-            print("Using default confusion matrix")
+        best_epoch = best_matrices['best_mr_epoch']
+        matrix_suffix = best_epoch - (best_epoch + 1) % 3
+        if matrix_suffix >= 2:
+            conf_matrix_path = data_path('misc/conf/conf_mat_updated_{}.npy'.format(matrix_suffix))
+            if os.path.exists(conf_matrix_path):
+                self.conf.MODEL.CONF_MAT_FREQ_TRAIN = conf_matrix_path
+                print(f"Using confusion matrix for epoch {best_epoch}: {conf_matrix_path}")
 
         # 加载数据集和模型
         print("Loading dataset...")
