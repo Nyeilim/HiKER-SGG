@@ -4,6 +4,7 @@
 
 import os
 import sys
+
 import numpy as np
 from pyximport import pyximport
 
@@ -11,8 +12,6 @@ sys.path.append("/output/HiKER-SGG/")  # 添加环境变量
 pyximport.install(setup_args={"include_dirs": np.get_include()}, reload_support=True)
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-from model.refactor.provider import provide_model, provide_dataloader
-from model.refactor.util import load_best_matrices
 from visualize.inference import SimpleInference
 from visualize.renderer import SceneGraphRenderer
 
@@ -40,7 +39,7 @@ def run_demo(
     # 创建输出目录
     os.makedirs(output_dir, exist_ok=True)
 
-    print(f"\nVisualizing {len(img_indices)} image(s)...")
+    print(f"Visualizing {len(img_indices)} image(s)...")
 
     # 可视化每张图片
     for idx in img_indices:

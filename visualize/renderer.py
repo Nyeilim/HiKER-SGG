@@ -111,7 +111,20 @@ class SceneGraphRenderer:
 
         # 绘制关系
         if relations is not None and len(relations) > 0:
-            for i, (subj_idx, obj_idx, pred_idx) in enumerate(relations):
+            # relations 的 shape 是 (num_rels, 2)，只包含 (subj_idx, obj_idx)
+            # 需要从 pred_rel_scores 中计算最优谓词索引
+            if rel_scores is not None and len(relations) == rel_scores.shape[0]:
+                # 预测关系：从 rel_scores 中获取最优谓词索引（跳过背景类别索引0）
+                pred_indices = rel_scores[:, 1:].argmax(axis=1) + 1
+                pred_rel_probs = rel_scores[:, 1:].max(axis=1)  # 谓词概率
+                rel_triplets = [(relations[i][0], relations[i][1], pred_indices[i])
+                               for i in range(len(relations))]
+            else:
+                # Ground Truth 关系：relations 本身就是 (num_rels, 3)，包含谓词索引
+                rel_triplets = relations
+                pred_rel_probs = None
+
+            for i, (subj_idx, obj_idx, pred_idx) in enumerate(rel_triplets):
                 # 过滤掉背景
                 if subj_idx == 0 or obj_idx == 0:
                     continue
@@ -125,7 +138,7 @@ class SceneGraphRenderer:
 
                 # 获取关系名称和得分
                 pred_name = ind_to_predicates[pred_idx]
-                score_text = f" ({rel_scores[i]:.2f})" if rel_scores is not None else ""
+                score_text = f" ({pred_rel_probs[i]:.2f})" if pred_rel_probs is not None else ""
 
                 # 绘制连接线
                 color = self.relation_colors[pred_idx % len(self.relation_colors)]

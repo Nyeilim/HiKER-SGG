@@ -4,17 +4,16 @@
 
 import os
 import sys
+
 import torch
-import numpy as np
 from PIL import Image
 
 # 添加项目路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import config
-from config import ModelConfig, BOX_SCALE, IM_SCALE, data_path
+from config import BOX_SCALE, IM_SCALE
 from model.refactor.provider import provide_model, provide_dataloader
-from model.refactor.util import load_best_matrices
+from run.util import create_test_config
 
 
 class SimpleInference:
@@ -43,6 +42,9 @@ class SimpleInference:
         if test_n:
             self.conf.test_n = True
 
+        # 设置 num_workers 为 0，避免 Windows 下的多进程问题
+        self.conf.num_workers = 0
+
         # 加载数据集和模型
         print("Loading dataset...")
         self.dataset, self.dataloader = provide_dataloader(self.conf, 'test')
@@ -53,6 +55,8 @@ class SimpleInference:
             self.dataset.ind_to_classes,
             self.dataset.ind_to_predicates
         )
+        self.model.eval()
+        print("Model.Training:{}".format(self.model.training))
 
         # 获取谓词映射
         self.ind_to_predicates = self.dataset.ind_to_predicates
@@ -79,19 +83,14 @@ class SimpleInference:
             pred_rel_scores: 关系得分 (M,)
         """
         # 跳到指定索引
+        batch = None
         for idx, batch in enumerate(self.dataloader):
             if idx == img_idx:
                 break
 
         # 推理
         with torch.no_grad():
-            det_res = self.model(batch)
-
-        if self.conf.num_gpus == 1:
-            det_res = [det_res]
-
-        # 解析结果
-        boxes, objs, obj_scores, rels, pred_scores = det_res[0]
+            boxes_i, objs_i, obj_scores_i, rels_i, pred_scores_i = self.model[batch]
 
         # 获取ground truth
         img_path = self.dataset.filenames[img_idx]
@@ -107,10 +106,10 @@ class SimpleInference:
             'gt_boxes': gt_boxes,
             'gt_classes': gt_classes,
             'gt_relations': gt_relations,
-            'pred_boxes': boxes * BOX_SCALE/IM_SCALE,
-            'pred_classes': objs,
-            'pred_relations': rels,
-            'pred_rel_scores': pred_scores,
+            'pred_boxes': boxes_i * BOX_SCALE/IM_SCALE,
+            'pred_classes': objs_i,
+            'pred_relations': rels_i,
+            'pred_rel_scores': pred_scores_i,
             'ind_to_classes': self.dataset.ind_to_classes,
             'ind_to_predicates': self.ind_to_predicates,
         }
