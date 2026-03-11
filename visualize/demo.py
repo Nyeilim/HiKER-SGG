@@ -55,7 +55,7 @@ def run_demo(
             save_path = os.path.join(output_dir, f"{img_name}_pred.png")
 
         # 渲染
-        renderer.render(result, save_path=save_path, show=True, title=title)
+        renderer.render(result, save_path=save_path, show=True, title=None)
 
         # 打印一些统计信息
         print(f"  Image: {result['img_path']}")
@@ -67,7 +67,7 @@ def run_demo(
 
 if __name__ == '__main__':
     task_type = 'predcls'
-    img_indices = (0, 1, 2)
+    img_indices = (0,68,107)
     ckpt_path = None
     test_n = False
     output_dir = os.path.join(DATA_PATH, 'visualization')

@@ -24,26 +24,30 @@ CORRUPTIONS = [
     ('Gaussian Noise', gaussian_noise),
     ('Shot Noise', shot_noise),
     ('Impulse Noise', impulse_noise),
-    ('Speckle Noise', speckle_noise),
-    ('Gaussian Blur', gaussian_blur),
-    ('Glass Blur', glass_blur),
     ('Defocus Blur', defocus_blur),
+    ('Frosted Glass Blur', glass_blur),
+
     ('Motion Blur', motion_blur),
     ('Zoom Blur', zoom_blur),
+    ('Snow', snow),
     ('Fog', fog),
     ('Frost', frost),
-    ('Snow', snow),
-    ('Spatter', spatter),
-    ('Contrast', contrast),
+
     ('Brightness', brightness),
-    ('Saturate', saturate),
-    ('JPEG Comp.', jpeg_compression),
-    ('Pixelate', pixelate),
+    ('Contrast', contrast),
     ('Elastic', elastic_transform),
+    ('Pixelate', pixelate),
+    ('JPEG', jpeg_compression),
 ]
 
 # 额外的扰动类型（如果需要）
 EXTRA_CORRUPTIONS = [
+    ('Saturate', saturate),
+    ('Spatter', spatter),
+    ('Speckle Noise', speckle_noise),
+    ('Gaussian Blur', gaussian_blur),
+
+    # 下面四种是 HiKER-SGG 中的
     ('Waterdrop', waterdrop),
     ('Wildfire Smoke', wildfire_smoke),
     ('Dust', dust),
@@ -69,7 +73,7 @@ def visualize_corruptions(image_path, output_path=None, severity=1, include_extr
     n_corruptions = len(corruptions_list)
 
     # 创建图形
-    ncols = 5
+    ncols = 4
     nrows = (n_corruptions + 1) // ncols + 1  # +1 for original image
 
     fig = plt.figure(figsize=(ncols * 4, nrows * 3))
@@ -197,4 +201,4 @@ def list_available_corruptions():
 if __name__ == '__main__':
     image_path = '/root/VG_100K/2343729.jpg'
     output_path = '/output/data/visualization/2343729_cor.png'
-    visualize_corruptions(image_path, output_path)
+    visualize_corruptions(image_path, output_path, severity=2)
