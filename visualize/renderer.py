@@ -60,6 +60,9 @@ class SceneGraphRenderer:
         fig = plt.figure(figsize=(figsize_width, figsize_height), dpi=dpi)
         ax = fig.add_axes([0, 0, 1, 1])  # [left, bottom, width, height] 均为 0-1 的比例
 
+        if title is not None:
+            fig.suptitle(title, fontsize=12, fontweight='bold')
+
         # 输出到终端 (保持原有逻辑)
         print(f"\nGround Truth Relations: ")
         for i, (subj_idx, obj_idx, pred_idx) in enumerate(gt_relations):
@@ -106,8 +109,6 @@ class SceneGraphRenderer:
         )
 
         if save_path:
-            # 5. 【关键修改】保存参数优化
-            # pad_inches=0 确保不留白边
             plt.savefig(save_path, dpi=dpi, bbox_inches='tight', pad_inches=0,
                        facecolor='white', edgecolor='none', optimize=False)
             print(f"Saved to {save_path}")
@@ -140,7 +141,7 @@ class SceneGraphRenderer:
             # 为每个框分配不同颜色
             box_color = self.box_colors[i % len(self.box_colors)]
 
-            # 绘制矩形框（linewidth=1）
+            # 绘制矩形框
             rect = patches.Rectangle(
                 (x1, y1), width, height,
                 linewidth=1, edgecolor=box_color, facecolor='none'
@@ -150,14 +151,10 @@ class SceneGraphRenderer:
             # 绘制类别标签（fontsize=8）
             class_name = ind_to_classes[cls]
 
-            # 【修改1】智能调整标签位置，避免超出图片边界
             # 如果框在图片顶部（y1 < 15），标签放在框内下方；否则放在框上方
             if y1 < 15:
                 # 框在顶部，标签放在框内下方
-                label_y = y1 + 15
-                # 确保不超出图片底部
-                if label_y > img_height - 5:
-                    label_y = img_height - 5
+                label_y = y1 + 10
             else:
                 # 框不在顶部，标签放在框上方
                 label_y = y1 - 5

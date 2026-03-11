@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+import os
+from config import ROOT_PATH
 
 # /////////////// Corruption Helpers ///////////////
 
@@ -173,7 +175,7 @@ def fgsm(x, source_net, severity=1):
 def gaussian_blur(x, severity=1):
     c = [1, 2, 3, 4, 6][severity - 1]
 
-    x = gaussian(np.array(x) / 255., sigma=c, multichannel=True)
+    x = gaussian(np.array(x) / 255., sigma=c, channel_axis=-1)
     return np.clip(x, 0, 1) * 255
 
 
@@ -266,8 +268,8 @@ def frost(x, severity=1):
     # idx = np.random.randint(5)
 
     width, height = x.size
-    root_path = '/home/ce/eoa/dataloaders/'
-    frost = cv2.imread(root_path + 'frost/frostlarge.jpg')
+    root_path = os.path.join(ROOT_PATH, 'model', 'dataloaders')
+    frost = cv2.imread(os.path.join(root_path, 'frost/frostlarge.jpg'))
     # randomly crop and convert to rgb
     frost = frost[:height, :width][..., [2, 1, 0]]
 
@@ -445,8 +447,8 @@ def sunglare(x, severity=1):
     # idx = np.random.randint(5)
     x = x.copy()
     width, height = x.size
-    root_path = '/home/ce/eoa/dataloaders/'
-    sunglare = PILImage.open(root_path + 'corruption_filter/sunglare.png').convert('RGBA')
+    root_path = os.path.join(ROOT_PATH, 'model', 'dataloaders')
+    sunglare = PILImage.open(os.path.join(root_path, 'corruption_filter', 'sunglare.png')).convert('RGBA')
     margin = (1 - c) / 2
     # crop the middle part of the sunglare with ratio
     sunglare = sunglare.crop((sunglare.size[0] * margin, sunglare.size[1] * margin, sunglare.size[0] * (1 - margin), sunglare.size[1] * (1 - margin)))
@@ -465,8 +467,8 @@ def sunglare(x, severity=1):
 #     # idx = np.random.randint(5)
 #     x = x.copy()
 #     width, height = x.size
-#     root_path = '/home/ce/eoa/dataloaders/'
-#     frost = cv2.imread(root_path + 'corruption_filter/waterdrop.png')
+#     root_path = os.path.join(ROOT_PATH, 'model', 'dataloaders')
+#     frost = cv2.imread(os.path.join(root_path, 'corruption_filter', 'waterdrop.png'))
 #     # randomly crop and convert to rgb
 #     frost = frost[:height, :width][..., [2, 1, 0]]
 
@@ -482,14 +484,14 @@ def waterdrop(x, severity=1):
     IMAGE_SIZE = x.size
     window = arcade.open_window(*IMAGE_SIZE)
 
-    noise = PILImage.open("/home/ce/eoa/dataloaders/PythonShaders/noise.png")
+    noise = PILImage.open(os.path.join(ROOT_PATH, 'model', 'dataloaders', 'PythonShaders', 'noise.png'))
     noise = noise.resize(IMAGE_SIZE)
     noise = noise.rotate(180)
     noise = ImageOps.mirror(noise)
     noise = np.asarray(noise, dtype=np.uint8)
 
     # Setup Shader:
-    shader = Shadertoy.create_from_file(window.get_size(), "/home/ce/eoa/dataloaders/PythonShaders/shaders/" + c)
+    shader = Shadertoy.create_from_file(window.get_size(), os.path.join(ROOT_PATH, 'model', 'dataloaders', 'PythonShaders', 'shaders', c))
     shader.channel_1 = toTexture(noise, window.ctx)
 
     # Load Images
@@ -536,8 +538,8 @@ def wildfire_smoke(x, severity=1):
     x = x.copy()
 
     width, height = x.size
-    root_path = '/home/ce/eoa/dataloaders/'
-    smoke = PILImage.open(root_path + 'corruption_filter/smoke.png').convert('RGBA')
+    root_path = os.path.join(ROOT_PATH, 'model', 'dataloaders')
+    smoke = PILImage.open(os.path.join(root_path, 'corruption_filter', 'smoke.png')).convert('RGBA')
     # crop the bottom part of the sunglare
     smoke = smoke.crop((0, smoke.size[1] * (1 - c), smoke.size[0], smoke.size[1]))
     smoke = smoke.resize((width, height), PILImage.LANCZOS)
@@ -554,8 +556,8 @@ def dust(x, severity=1):
     # idx = np.random.randint(5)
     x = x.copy()
     width, height = x.size
-    root_path = '/home/ce/eoa/dataloaders/'
-    dust = PILImage.open(root_path + 'corruption_filter/dust.png').convert('RGBA')
+    root_path = os.path.join(ROOT_PATH, 'model', 'dataloaders')
+    dust = PILImage.open(os.path.join(root_path, 'corruption_filter', 'dust.png')).convert('RGBA')
     dust = dust.crop((0, 0, dust.size[0] * c, dust.size[1] * c))
     dust = dust.resize((width, height), PILImage.LANCZOS)
     x.paste(dust, (0, 0), dust)
@@ -571,8 +573,8 @@ def rain(x, severity=1):
     # idx = np.random.randint(5)
     x = x.copy()
     width, height = x.size
-    root_path = '/home/ce/eoa/dataloaders/'
-    rain = PILImage.open(root_path + 'corruption_filter/rain.png').convert('RGBA')
+    root_path = os.path.join(ROOT_PATH, 'model', 'dataloaders')
+    rain = PILImage.open(os.path.join(root_path, 'corruption_filter', 'rain.png')).convert('RGBA')
     # enhance the rain
     rain = ImageEnhance.Brightness(rain).enhance(c)
     # crop the bottom part of the sunglare

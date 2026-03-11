@@ -55,7 +55,7 @@ def run_demo(
             save_path = os.path.join(output_dir, f"{img_name}_pred.png")
 
         # 渲染
-        renderer.render(result, save_path=save_path, show=True)
+        renderer.render(result, save_path=save_path, show=True, title=title)
 
         # 打印一些统计信息
         print(f"  Image: {result['img_path']}")

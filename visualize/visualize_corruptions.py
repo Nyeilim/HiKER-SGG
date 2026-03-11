@@ -7,6 +7,7 @@ import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+from arcade.resources import image_planet
 
 # 导入扰动函数
 from model.dataloaders.corruptions import (
@@ -39,7 +40,6 @@ CORRUPTIONS = [
     ('JPEG Comp.', jpeg_compression),
     ('Pixelate', pixelate),
     ('Elastic', elastic_transform),
-    ('Sun Glare', sunglare),
 ]
 
 # 额外的扰动类型（如果需要）
@@ -48,6 +48,7 @@ EXTRA_CORRUPTIONS = [
     ('Wildfire Smoke', wildfire_smoke),
     ('Dust', dust),
     ('Rain', rain),
+    ('Sun Glare', sunglare),
 ]
 
 def visualize_corruptions(image_path, output_path=None, severity=1, include_extra=False):
@@ -194,29 +195,6 @@ def list_available_corruptions():
 
 
 if __name__ == '__main__':
-    import argparse
-
-    parser = argparse.ArgumentParser(description='Visualize image corruptions')
-    parser.add_argument('image_path', type=str, help='Path to input image')
-    parser.add_argument('--output', '-o', type=str, default=None,
-                       help='Output image path')
-    parser.add_argument('--severity', '-s', type=int, default=1,
-                       choices=[1, 2, 3, 4, 5],
-                       help='Corruption severity (1-5, default: 1)')
-    parser.add_argument('--single', type=str, default=None,
-                       help='Visualize single corruption with multiple severities')
-    parser.add_argument('--extra', action='store_true',
-                       help='Include extra corruptions (waterdrop, smoke, dust, rain)')
-    parser.add_argument('--list', action='store_true',
-                       help='List all available corruptions')
-
-    args = parser.parse_args()
-
-    if args.list:
-        list_available_corruptions()
-    elif args.single:
-        visualize_single_corruption(args.image_path, args.single,
-                                args.output, args.severity)
-    else:
-        visualize_corruptions(args.image_path, args.output,
-                         args.severity, args.extra)
+    image_path = '/root/VG_100K/2343729.jpg'
+    output_path = '/output/data/visualization/2343729_cor.png'
+    visualize_corruptions(image_path, output_path)
