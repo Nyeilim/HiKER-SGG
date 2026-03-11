@@ -52,10 +52,10 @@ def run_demo(
         # 保存路径
         save_path = None
         if output_dir:
-            save_path = os.path.join(output_dir, f"{img_name}_comparison.png")
+            save_path = os.path.join(output_dir, f"{img_name}_pred.png")
 
         # 渲染
-        renderer.render(result, save_path=save_path, show=True, title=title)
+        renderer.render(result, save_path=save_path, show=True)
 
         # 打印一些统计信息
         print(f"  Image: {result['img_path']}")
