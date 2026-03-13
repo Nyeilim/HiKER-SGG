@@ -20,17 +20,15 @@ from run.util import create_test_config
 class SimpleInference:
     """轻量级推理类 - 只进行推理，不做评估"""
 
-    def __init__(self, task_type='predcls', ckpt_path=None, test_n=False):
+    def __init__(self, task_type='predcls', ckpt_path=None):
         """
         初始化推理器
 
         Args:
             task_type: 任务类型 ('predcls' 或 'sgcls')
             ckpt_path: 模型checkpoint路径（None 表示使用最优模型）
-            test_n: 是否使用带扰动的测试集
         """
         self.task_type = task_type
-        self.test_n = test_n
 
         # 使用 create_test_config 创建配置，这个方法已经包含了最优 epoch 和混淆矩阵的处理
         self.conf = create_test_config(task_type, epoch=None if ckpt_path is None else None)
@@ -38,10 +36,6 @@ class SimpleInference:
         # 如果指定了自定义 ckpt_path，设置到配置
         if ckpt_path is not None:
             self.conf.ckpt = ckpt_path
-
-        # 设置测试模式
-        if test_n:
-            self.conf.test_n = True
 
         # 设置 num_workers 为 0，避免 Windows 下的多进程问题
         self.conf.num_workers = 0
@@ -64,7 +58,6 @@ class SimpleInference:
 
         print(f"Dataset size: {len(self.dataset)}")
         print(f"Model loaded: {task_type}")
-        print(f"Test with corruptions: {test_n}")
 
     def __call__(self, img_idx):
         """
@@ -102,6 +95,10 @@ class SimpleInference:
         gt_boxes = self.dataset.gt_boxes[img_idx].copy()
         gt_classes = self.dataset.gt_classes[img_idx].copy()
         gt_relations = self.dataset.relationships[img_idx].copy()
+
+        # 对 GT 关系进行去重（去除重复的三元组）
+        if len(gt_relations) > 0:
+            gt_relations = np.unique(gt_relations, axis=0)
 
         # 将 GT 框从 BOX_SCALE (1024) 缩放到图片实际尺寸
         # 假设 GT 框是在 1024x1024 尺度上标注的

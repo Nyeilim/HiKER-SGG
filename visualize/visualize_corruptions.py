@@ -21,23 +21,23 @@ from model.dataloaders.corruptions import (
 
 # 定义20种主要的扰动类型和对应的函数
 CORRUPTIONS = [
-    ('Gaussian Noise', gaussian_noise),
-    ('Shot Noise', shot_noise),
-    ('Impulse Noise', impulse_noise),
-    ('Defocus Blur', defocus_blur),
-    ('Frosted Glass Blur', glass_blur),
+    ('(a) Gaussian Noise', gaussian_noise),
+    ('(b) Shot Noise', shot_noise),
+    ('(c) Impulse Noise', impulse_noise),
+    ('(d) Defocus Blur', defocus_blur),
+    ('(e) Frosted Glass Blur', glass_blur),
 
-    ('Motion Blur', motion_blur),
-    ('Zoom Blur', zoom_blur),
-    ('Snow', snow),
-    ('Fog', fog),
-    ('Frost', frost),
+    ('(f) Motion Blur', motion_blur),
+    ('(g) Zoom Blur', zoom_blur),
+    ('(h) Snow', snow),
+    ('(i) Fog', fog),
+    ('(j) Frost', frost),
 
-    ('Brightness', brightness),
-    ('Contrast', contrast),
-    ('Elastic', elastic_transform),
-    ('Pixelate', pixelate),
-    ('JPEG', jpeg_compression),
+    ('(k) Brightness', brightness),
+    ('(l) Contrast', contrast),
+    ('(m) Elastic', elastic_transform),
+    ('(n) Pixelate', pixelate),
+    ('(o) JPEG', jpeg_compression),
 ]
 
 # 额外的扰动类型（如果需要）
