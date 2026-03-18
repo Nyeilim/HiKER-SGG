@@ -115,7 +115,7 @@ def _val_epoch(model, conf, dataset, dataloader, matrix_eval):
 
             # 保存每个谓词的 R@K 指标到 JSON 文件（仅 PredCls 模式）
             if conf.mode == 'predcls':
-                json_file = data_path(f'per_predicate_recall_{conf.mode}.json')
+                json_file = data_path('hiker_per_predicate_recall.json')
                 save_per_predicate_recall_json(
                     evaluator_list, conf.mode, multiple_preds=False,
                     output_file=json_file, k_values=[50, 100]
@@ -124,7 +124,7 @@ def _val_epoch(model, conf, dataset, dataloader, matrix_eval):
             # 如果是 PredCls 且启用了召回样本跟踪，保存召回样本的详细信息
             if track_recall_samples and conf.mode == 'predcls':
                 recall_samples = evaluator[conf.mode].recall_samples
-                json_file_recall = data_path(f'recall_samples_{conf.mode}.json')
+                json_file_recall = data_path('hiker_recall_confidence_summary.json')
                 save_recall_samples_json(recall_samples, output_file=json_file_recall)
 
     model.train()

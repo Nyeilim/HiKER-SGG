@@ -176,7 +176,8 @@ def evaluate_from_dict(gt_entry, pred_entry, mode, result_dict, multiple_preds=F
 
         # 为每个被召回的 GT 关系记录详细信息
         for gt_idx in recalled_gt_indices:
-            gt_rel = gt_rels[gt_idx]  # [subject_idx, object_idx, predicate_idx]
+            gt_idx_int = int(gt_idx)  # 转换为 Python 整数
+            gt_rel = gt_rels[gt_idx_int]  # [subject_idx, object_idx, predicate_idx]
             predicate_idx = int(gt_rel[2])
 
             # 使用 ind_to_predicates 获取谓词名称
@@ -188,7 +189,7 @@ def evaluate_from_dict(gt_entry, pred_entry, mode, result_dict, multiple_preds=F
             # 找到预测这个 GT 关系的预测索引
             pred_idx = None
             for i, gt_matches in enumerate(pred_to_gt):
-                if gt_idx in gt_matches:
+                if gt_idx_int in gt_matches:
                     pred_idx = i
                     break
 
