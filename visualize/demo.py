@@ -70,8 +70,9 @@ def run_demo(
 if __name__ == '__main__':
     task_type = 'predcls'
     # 随机选取 10 个数字，范围 0~10000
-    img_indices = tuple(random.sample(range(10000), 10))
+    # img_indices = tuple(random.sample(range(1000), 10))
+    img_indices = (107,68,126,95)
     ckpt_path = None
     output_dir = os.path.join(DATA_PATH, 'visualization')
 
-    run_demo(task_type, img_indices, ckpt_path, output_dir, print_title=True)
+    run_demo(task_type, img_indices, ckpt_path, output_dir, print_title=False)

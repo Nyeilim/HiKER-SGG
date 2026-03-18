@@ -66,7 +66,7 @@ class SceneGraphRenderer:
         # 输出到终端 (保持原有逻辑)
         print(f"\nGround Truth Relations: ")
         for i, (subj_idx, obj_idx, pred_idx) in enumerate(gt_relations):
-            if subj_idx == 0 or obj_idx == 0:
+            if pred_idx == 0:  # 谓词为背景类时跳过
                 continue
             subj_name = ind_to_classes[gt_classes[subj_idx]]
             obj_name = ind_to_classes[gt_classes[obj_idx]]
@@ -79,12 +79,12 @@ class SceneGraphRenderer:
 
         pred_dict = {}
         for i, (subj_idx, obj_idx, pred_idx) in enumerate(pred_triplets):
-            if subj_idx != 0 and obj_idx != 0:
+            if pred_idx != 0:  # 谓词为非背景类时才添加到字典
                 pred_dict[(subj_idx, obj_idx)] = (pred_idx, pred_rel_probs_val[i], bg_probs[i])
 
         for gt_rel in gt_relations:
             subj_idx, obj_idx, gt_pred_idx = gt_rel
-            if subj_idx == 0 or obj_idx == 0:
+            if gt_pred_idx == 0:  # 谓词为背景类时跳过
                 continue
 
             subj_name = ind_to_classes[gt_classes[subj_idx]]
