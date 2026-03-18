@@ -23,13 +23,24 @@ np_set_printoptions(precision=3)
 
 
 class BasicSceneGraphEvaluator:
-    def __init__(self, mode, multiple_preds=False):
+    def __init__(self, mode, multiple_preds=False, track_recall_samples=False, ind_to_predicates=None, ind_to_classes=None):
         self.result_dict = {}
         self.mode = mode
         self.result_dict[self.mode + '_recall'] = {20: [], 50: [], 100: []}
         self.result_dict['predicate_confusion_matrix'] = np_zeros([51, 51], dtype='float')
         self.result_dict['predicate_confusion_matrix_int'] = np_zeros([51, 51], dtype='int')
         self.multiple_preds = multiple_preds
+
+        # 跟踪召回样本的置信度信息
+        self.track_recall_samples = track_recall_samples
+        self.ind_to_predicates = ind_to_predicates
+        self.ind_to_classes = ind_to_classes
+        if track_recall_samples:
+            self.recall_samples = {}  # {predicate_name: [list of recalled samples]}
+            # 初始化每个谓词的列表
+            if ind_to_predicates is not None:
+                for pred_name in ind_to_predicates:
+                    self.recall_samples[pred_name] = []
 
     @classmethod
     def all_modes(cls, **kwargs):
@@ -41,9 +52,13 @@ class BasicSceneGraphEvaluator:
         evaluators = {m: cls(mode=m, multiple_preds=True, **kwargs) for m in ('preddet', 'phrdet')}
         return evaluators
 
-    def evaluate_scene_graph_entry(self, gt_entry, pred_scores, viz_dict=None, iou_thresh=0.5):
-        res = evaluate_from_dict(gt_entry, pred_scores, self.mode, self.result_dict,
-                                  viz_dict=viz_dict, iou_thresh=iou_thresh, multiple_preds=self.multiple_preds)
+    def evaluate_scene_graph_entry(self, gt_entry, pred_entry, viz_dict=None, iou_thresh=0.5):
+        res = evaluate_from_dict(gt_entry, pred_entry, self.mode, self.result_dict,
+                                  viz_dict=viz_dict, iou_thresh=iou_thresh, multiple_preds=self.multiple_preds,
+                                  track_recall_samples=self.track_recall_samples,
+                                  recall_samples=self.recall_samples if self.track_recall_samples else None,
+                                  ind_to_predicates=self.ind_to_predicates,
+                                  ind_to_classes=self.ind_to_classes)
         # self.print_stats()
         return res
 
@@ -71,7 +86,7 @@ class BasicSceneGraphEvaluator:
 
 
 def evaluate_from_dict(gt_entry, pred_entry, mode, result_dict, multiple_preds=False,
-                       viz_dict=None, **kwargs):
+                       viz_dict=None, track_recall_samples=False, recall_samples=None, ind_to_predicates=None, ind_to_classes=None, **kwargs):
     """
     Shortcut to doing evaluate_recall from dict
     :param gt_entry: Dictionary containing gt_relations, gt_boxes, gt_classes
@@ -79,6 +94,10 @@ def evaluate_from_dict(gt_entry, pred_entry, mode, result_dict, multiple_preds=F
     :param mode: 'det' or 'cls'
     :param result_dict:
     :param viz_dict:
+    :param track_recall_samples: Whether to track recalled samples with confidence
+    :param recall_samples: Dictionary to store recalled samples by predicate
+    :param ind_to_predicates: List of predicate names indexed by predicate ID
+    :param ind_to_classes: List of class names indexed by class ID
     :param kwargs:
     :return:
     """
@@ -149,6 +168,62 @@ def evaluate_from_dict(gt_entry, pred_entry, mode, result_dict, multiple_preds=F
         match = reduce(np_union1d, pred_to_gt[:k])
         rec_i = float(len(match)) / float(gt_rels.shape[0])
         result_dict[mode + '_recall'][k].append(rec_i)
+
+    # 跟踪召回样本的置信度信息
+    if track_recall_samples and recall_samples is not None:
+        # 获取被召回的 GT 关系索引
+        recalled_gt_indices = reduce(np_union1d, pred_to_gt[:100])  # 使用 top 100
+
+        # 为每个被召回的 GT 关系记录详细信息
+        for gt_idx in recalled_gt_indices:
+            gt_rel = gt_rels[gt_idx]  # [subject_idx, object_idx, predicate_idx]
+            predicate_idx = int(gt_rel[2])
+
+            # 使用 ind_to_predicates 获取谓词名称
+            if ind_to_predicates is not None and predicate_idx < len(ind_to_predicates):
+                predicate_name = ind_to_predicates[predicate_idx]
+            else:
+                continue  # 跳过无效的谓词索引
+
+            # 找到预测这个 GT 关系的预测索引
+            pred_idx = None
+            for i, gt_matches in enumerate(pred_to_gt):
+                if gt_idx in gt_matches:
+                    pred_idx = i
+                    break
+
+            if pred_idx is not None:
+                # 获取预测信息
+                subject_idx = int(pred_rels[pred_idx][0])
+                object_idx = int(pred_rels[pred_idx][1])
+                predicate_score = float(predicate_scores[pred_idx])
+
+                # 获取主体和客体的类别名称（将索引转换为名称）
+                subject_class_idx = int(pred_classes[subject_idx])
+                object_class_idx = int(pred_classes[object_idx])
+
+                if ind_to_classes is not None:
+                    subject_class = ind_to_classes[subject_class_idx] if subject_class_idx < len(ind_to_classes) else str(subject_class_idx)
+                    object_class = ind_to_classes[object_class_idx] if object_class_idx < len(ind_to_classes) else str(object_class_idx)
+                else:
+                    subject_class = str(subject_class_idx)
+                    object_class = str(object_class_idx)
+
+                # 获取 image_id（如果有的话）
+                image_id = gt_entry.get('image_id', 'unknown')
+
+                # 构建召回样本记录
+                recall_sample = {
+                    "image_id": str(image_id),
+                    "subject": subject_class,
+                    "object": object_class,
+                    "confidence": float(predicate_score)
+                }
+
+                # 添加到对应谓词的列表中
+                if predicate_name in recall_samples:
+                    recall_samples[predicate_name].append(recall_sample)
+
     return pred_to_gt, pred_5ples, rel_scores2
 
 def confusion_matrix(gt_rels, gt_boxes, gt_classes, pred_rel_inds, rel_scores, result_dict):
@@ -330,7 +405,7 @@ def _compute_pred_matches(gt_triplets, pred_triplets,
     return pred_to_gt
 
 
-def calculate_mr(evaluator_list, mode, multiple_preds=False, save_file=None, return_per_class=False):
+def calculate_mr(evaluator_list, mode, multiple_preds=False, save_file=None, return_per_class=False, predicate_names=None):
     all_rel_results = {}
     for (pred_id, pred_name, evaluator_rel) in evaluator_list:
         #print('\n')
@@ -374,6 +449,117 @@ def calculate_mr(evaluator_list, mode, multiple_preds=False, save_file=None, ret
         ] for key in ['R@20', 'R@50', 'R@100']}
         return mean_recall, per_class_recall
     return mean_recall
+
+
+def save_per_predicate_recall_json(evaluator_list, mode, multiple_preds=False, output_file='per_predicate_recall.json', k_values=[50, 100]):
+    """
+    保存每个谓词的 R@K 指标到 JSON 文件
+    :param evaluator_list: 评估器列表 [(pred_id, pred_name, evaluator_rel), ...]
+    :param mode: 评估模式 ('predcls', 'sgcls', 'sgdet')
+    :param multiple_preds: 是否为多预测模式
+    :param output_file: 输出 JSON 文件路径
+    :param k_values: 要保存的 R@K 值列表
+    :return: 保存的字典
+    """
+    import json
+    from numpy import std as np_std, isnan as np_isnan
+
+    all_rel_results = {}
+    predicate_list = []
+
+    for (pred_id, pred_name, evaluator_rel) in evaluator_list:
+        stats = evaluator_rel[mode].get_stats()
+        all_rel_results[pred_name] = stats
+
+        # 构建 per_predicate 列表
+        pred_data = {"predicate": pred_name}
+        for k in k_values:
+            recall_key = f'R@{k}'
+            if recall_key in stats:
+                pred_data[f'recall_{k}'] = stats[recall_key]
+            else:
+                pred_data[f'recall_{k}'] = 0.0
+        predicate_list.append(pred_data)
+
+    # 计算平均 recall
+    mean_recall = {}
+    std_recall = {}
+    for k in k_values:
+        recall_key = f'R@{k}'
+        recall_values = []
+        for pred_name, stats in all_rel_results.items():
+            if recall_key in stats and not np_isnan(stats[recall_key]):
+                recall_values.append(stats[recall_key])
+
+        if len(recall_values) > 0:
+            mean_recall[recall_key] = np_mean(recall_values)
+            std_recall[recall_key] = np_std(recall_values)
+        else:
+            mean_recall[recall_key] = 0.0
+            std_recall[recall_key] = 0.0
+
+    # 添加 overall_stats
+    overall_stats = {}
+    for k in k_values:
+        overall_stats[f'mean_recall_{k}'] = float(mean_recall[f'R@{k}'])
+        overall_stats[f'std_recall_{k}'] = float(std_recall[f'R@{k}'])
+
+    # 构建 JSON 输出
+    output_dict = {
+        "overall_stats": overall_stats,
+        "per_predicate": predicate_list
+    }
+
+    # 保存到 JSON 文件
+    with open(output_file, 'w') as f:
+        json.dump(output_dict, f, indent=2)
+
+    print(f'Per-predicate recall saved to {output_file}', flush=True)
+
+    return output_dict
+
+
+def save_recall_samples_json(recall_samples_dict, output_file='recall_samples.json'):
+    """
+    保存召回样本的详细信息到 JSON 文件
+    :param recall_samples_dict: 召回样本字典 {predicate_name: [list of samples]}
+    :param output_file: 输出 JSON 文件路径
+    """
+    import json
+    from numpy import mean as np_mean, min as np_min, max as np_max
+
+    # 计算每个谓词的统计信息
+    stats = {}
+    for predicate_name, samples in recall_samples_dict.items():
+        if len(samples) == 0:
+            stats[predicate_name] = {
+                "count": 0,
+                "avg_confidence": 0.0,
+                "min_confidence": 0.0,
+                "max_confidence": 0.0
+            }
+        else:
+            confidences = [s["confidence"] for s in samples]
+            stats[predicate_name] = {
+                "count": len(samples),
+                "avg_confidence": float(np_mean(confidences)),
+                "min_confidence": float(np_min(confidences)),
+                "max_confidence": float(np_max(confidences))
+            }
+
+    # 构建 JSON 输出
+    output_dict = {
+        "by_predicate": recall_samples_dict,
+        "stats": stats
+    }
+
+    # 保存到 JSON 文件
+    with open(output_file, 'w') as f:
+        json.dump(output_dict, f, indent=2)
+
+    print(f'Recall samples saved to {output_file}', flush=True)
+
+    return output_dict
 
 
 def eval_entry(mode, gt_entry, pred_entry, evaluator, evaluator_multiple_preds, evaluator_list, evaluator_multiple_preds_list):
